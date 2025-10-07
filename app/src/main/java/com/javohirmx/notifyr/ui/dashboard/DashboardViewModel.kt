@@ -9,14 +9,14 @@ import com.javohirmx.notifyr.domain.model.NotificationImportance
 import com.javohirmx.notifyr.utils.PermissionUtils
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
 
-class DashboardViewModel(
-    application: Application
+@HiltViewModel
+class DashboardViewModel @Inject constructor(
+    application: Application,
+    private val notificationRepository: NotificationRepository
 ) : AndroidViewModel(application) {
-    
-    // TODO: Implement proper dependency injection later
-    // For now, we'll create instances manually for the prototype
-    private lateinit var notificationRepository: NotificationRepository
     
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
