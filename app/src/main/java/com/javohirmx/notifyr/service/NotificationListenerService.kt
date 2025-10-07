@@ -24,6 +24,9 @@ class NotificationListenerService : NotificationListenerService() {
     @Inject
     lateinit var rulesEngine: NotificationRulesEngine
     
+    @Inject
+    lateinit var customNotificationManager: NotificationManager
+    
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     companion object {
@@ -100,9 +103,9 @@ class NotificationListenerService : NotificationListenerService() {
     }
     
     private fun handleUrgentNotification(notification: NotificationData) {
-        // TODO: Implement urgent notification handling
-        // This will be implemented in the smart notifications phase
-        Log.i(TAG, "Urgent notification detected: ${notification.appName} - ${notification.title}")
+        // Show custom urgent notification with enhanced styling
+        customNotificationManager.showUrgentNotification(notification)
+        Log.i(TAG, "Urgent notification displayed: ${notification.appName} - ${notification.title}")
     }
     
     override fun onListenerConnected() {

@@ -9,11 +9,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.widget.Toast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -23,6 +25,14 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showClearDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    
+    // Show toast when developer mode is activated
+    LaunchedEffect(uiState.isDeveloperModeEnabled) {
+        if (uiState.isDeveloperModeEnabled) {
+            Toast.makeText(context, "🔧 Developer Mode Activated!", Toast.LENGTH_SHORT).show()
+        }
+    }
     
     LaunchedEffect(Unit) {
         viewModel.refreshSettings()
@@ -117,15 +127,91 @@ fun SettingsScreen(
             )
         }
         
-        Spacer(modifier = Modifier.height(24.dp))
+        // Developer Mode Section (Hidden by default)
+        if (uiState.isDeveloperModeEnabled) {
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            SettingsSection(title = "🔧 Developer Mode") {
+                // Developer mode indicator
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Build,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Developer Mode Active",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "Testing features are now available",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        TextButton(onClick = { viewModel.disableDeveloperMode() }) {
+                            Text("Disable")
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Test notification buttons
+                SettingCard(
+                    title = "Test Urgent Notification",
+                    description = "Create a test urgent notification with custom styling",
+                    icon = Icons.Default.Warning,
+                    onClick = { viewModel.createTestUrgentNotification() }
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                SettingCard(
+                    title = "Test Normal Notification",
+                    description = "Create a test normal notification",
+                    icon = Icons.Default.Notifications,
+                    onClick = { viewModel.createTestNormalNotification() }
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                SettingCard(
+                    title = "Test Ignored Notification",
+                    description = "Create a test ignored notification",
+                    icon = Icons.Default.Close,
+                    onClick = { viewModel.createTestIgnoredNotification() }
+                )
+            }
+            
+            Spacer(modifier = Modifier.height(24.dp))
+        }
         
         // About Section
         SettingsSection(title = "About") {
             SettingCard(
                 title = "App Version",
-                description = "1.0.0 (Beta)",
+                description = if (uiState.versionTapCount > 0 && !uiState.isDeveloperModeEnabled) {
+                    "1.0.0 (Beta) - ${7 - uiState.versionTapCount} more taps"
+                } else {
+                    "1.0.0 (Beta)"
+                },
                 icon = Icons.Default.Info,
-                onClick = { /* TODO: Show version info */ }
+                onClick = { viewModel.onVersionTapped() }
             )
             
             Spacer(modifier = Modifier.height(8.dp))

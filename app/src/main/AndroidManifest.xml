@@ -49,6 +49,11 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+        
+        <!-- Notification Action Receiver -->
+        <receiver
+            android:name=".service.NotificationActionReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>
