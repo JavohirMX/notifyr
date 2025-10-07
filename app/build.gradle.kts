@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     id("kotlin-kapt")
+    id("dagger.hilt.android.plugin")
 }
 
 android {
@@ -38,6 +39,10 @@ android {
     buildFeatures {
         compose = true
     }
+    
+    lint {
+        disable += "ProtectedPermissions"
+    }
 }
 
 dependencies {
@@ -64,9 +69,15 @@ dependencies {
     
     // ViewModel
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
     
     // Preferences DataStore
     implementation(libs.androidx.datastore.preferences)
+    
+    // Dependency Injection - Hilt
+    implementation("com.google.dagger:hilt-android:2.48")
+    kapt("com.google.dagger:hilt-compiler:2.48")
+    implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
     
     // Testing
     testImplementation(libs.junit)
