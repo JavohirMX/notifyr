@@ -13,6 +13,9 @@ import androidx.navigation.compose.rememberNavController
 import com.javohirmx.notifyr.ui.components.BottomNavigationBar
 import com.javohirmx.notifyr.ui.navigation.NotifyrNavigation
 import com.javohirmx.notifyr.ui.theme.NotifyrTheme
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

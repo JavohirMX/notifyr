@@ -16,18 +16,20 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.javohirmx.notifyr.domain.model.NotificationImportance
 import com.javohirmx.notifyr.utils.PermissionUtils
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
-    navController: NavController
+    navController: NavController,
+    viewModel: DashboardViewModel = hiltViewModel()
 ) {
-    val context = LocalContext.current
-    var isNotificationListenerEnabled by remember { mutableStateOf(false) }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     
-    // Check permission status
+    // Refresh data when screen becomes visible
     LaunchedEffect(Unit) {
-        isNotificationListenerEnabled = PermissionUtils.isNotificationListenerEnabled(context)
+        viewModel.refreshData()
     }
     
     Column(
@@ -37,34 +39,34 @@ fun DashboardScreen(
     ) {
         // Permission Status Card
         PermissionStatusCard(
-            isNotificationListenerEnabled = isNotificationListenerEnabled,
+            isNotificationListenerEnabled = uiState.isNotificationListenerEnabled,
             onEnableClick = { 
-                PermissionUtils.openNotificationListenerSettings(context)
+                viewModel.requestNotificationListenerPermission()
             }
         )
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        // Statistics Cards (placeholder data for now)
+        // Statistics Cards
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             StatCard(
                 title = "Urgent",
-                count = 0,
+                count = uiState.urgentCount,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.weight(1f)
             )
             StatCard(
                 title = "Normal",
-                count = 0,
+                count = uiState.normalCount,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.weight(1f)
             )
             StatCard(
                 title = "Ignored",
-                count = 0,
+                count = uiState.ignoredCount,
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.weight(1f)
             )
@@ -81,36 +83,52 @@ fun DashboardScreen(
         
         Spacer(modifier = Modifier.height(8.dp))
         
-        // Placeholder for now
-        Card(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(32.dp),
-                contentAlignment = Alignment.Center
+        // Recent urgent notifications or placeholder
+        if (uiState.recentUrgentNotifications.isNotEmpty()) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = if (isNotificationListenerEnabled) {
-                            "No urgent notifications yet"
-                        } else {
-                            "Enable notification access to start filtering"
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                items(uiState.recentUrgentNotifications) { notification ->
+                    NotificationCard(
+                        title = notification.title,
+                        text = notification.text,
+                        appName = notification.appName,
+                        timestamp = notification.timestamp,
+                        importance = notification.importance
                     )
-                    
-                    if (isNotificationListenerEnabled) {
-                        Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+        } else {
+            Card(
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
                         Text(
-                            text = "The app is now monitoring your notifications",
-                            style = MaterialTheme.typography.bodySmall,
+                            text = if (uiState.isNotificationListenerEnabled) {
+                                "No urgent notifications yet"
+                            } else {
+                                "Enable notification access to start filtering"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        
+                        if (uiState.isNotificationListenerEnabled) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "The app is now monitoring your notifications",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
