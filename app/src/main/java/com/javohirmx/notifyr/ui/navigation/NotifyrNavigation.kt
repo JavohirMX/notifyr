@@ -8,15 +8,20 @@ import androidx.navigation.compose.composable
 import com.javohirmx.notifyr.ui.dashboard.DashboardScreen
 import com.javohirmx.notifyr.ui.history.HistoryScreen
 import com.javohirmx.notifyr.ui.settings.SettingsScreen
+import com.javohirmx.notifyr.ui.settings.AppRulesScreen
+import com.javohirmx.notifyr.ui.settings.KeywordManagementScreen
+import com.javohirmx.notifyr.ui.settings.HelpScreen
+import com.javohirmx.notifyr.ui.onboarding.OnboardingScreen
 
 @Composable
 fun NotifyrNavigation(
     navController: NavHostController,
+    startDestination: String = Screen.Dashboard.route,
     modifier: Modifier = Modifier
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Dashboard.route,
+        startDestination = startDestination,
         modifier = modifier
     ) {
         composable(Screen.Dashboard.route) {
@@ -30,6 +35,22 @@ fun NotifyrNavigation(
         composable(Screen.Settings.route) {
             SettingsScreen(navController = navController)
         }
+        
+        composable(Screen.AppRules.route) {
+            AppRulesScreen(navController = navController)
+        }
+        
+        composable(Screen.KeywordManagement.route) {
+            KeywordManagementScreen(navController = navController)
+        }
+        
+        composable(Screen.Help.route) {
+            HelpScreen(navController = navController)
+        }
+        
+        composable(Screen.Onboarding.route) {
+            OnboardingScreen(navController = navController)
+        }
     }
 }
 
@@ -37,4 +58,8 @@ sealed class Screen(val route: String, val title: String) {
     object Dashboard : Screen("dashboard", "Dashboard")
     object History : Screen("history", "History")
     object Settings : Screen("settings", "Settings")
+    object AppRules : Screen("app_rules", "App Rules")
+    object KeywordManagement : Screen("keyword_management", "Keyword Management")
+    object Help : Screen("help", "Help & Support")
+    object Onboarding : Screen("onboarding", "Welcome")
 }

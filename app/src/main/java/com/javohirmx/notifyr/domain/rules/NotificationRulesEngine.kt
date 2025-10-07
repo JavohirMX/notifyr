@@ -1,8 +1,16 @@
 package com.javohirmx.notifyr.domain.rules
 
+import com.javohirmx.notifyr.data.repository.AppRulesRepository
+import com.javohirmx.notifyr.data.repository.KeywordRulesRepository
 import com.javohirmx.notifyr.domain.model.*
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class NotificationRulesEngine {
+@Singleton
+class NotificationRulesEngine @Inject constructor(
+    private val appRulesRepository: AppRulesRepository,
+    private val keywordRulesRepository: KeywordRulesRepository
+) {
     
     // Default urgent keywords
     private val defaultUrgentKeywords = listOf(
@@ -66,6 +74,17 @@ class NotificationRulesEngine {
     private fun evaluateAppRules(notification: NotificationData): NotificationImportance? {
         val packageName = notification.packageName
         
+        // Check for user-defined app rules first
+        val appRule = appRulesRepository.getAppRule(packageName)
+        if (appRule != null) {
+            return when (appRule.ruleType) {
+                AppRuleType.ALWAYS_URGENT -> NotificationImportance.URGENT
+                AppRuleType.ALWAYS_IGNORE -> NotificationImportance.IGNORE
+                AppRuleType.FILTER_KEYWORDS -> null // Continue to keyword evaluation
+            }
+        }
+        
+        // Fallback to default rules for apps not configured by user
         // Banking apps are always urgent
         if (defaultBankingApps.contains(packageName)) {
             return NotificationImportance.URGENT
@@ -87,7 +106,30 @@ class NotificationRulesEngine {
     private fun evaluateKeywordRules(notification: NotificationData): NotificationImportance? {
         val content = "${notification.title} ${notification.text}".lowercase()
         
-        // Check for urgent keywords
+        // Check user-defined keyword rules first
+        val keywordRules = keywordRulesRepository.keywordRules.value
+        
+        for (keywordRule in keywordRules) {
+            if (!keywordRule.isEnabled) continue
+            
+            val matches = if (keywordRule.isRegex) {
+                try {
+                    val regex = Regex(keywordRule.keyword, RegexOption.IGNORE_CASE)
+                    regex.containsMatchIn(content)
+                } catch (e: Exception) {
+                    // Invalid regex, fall back to simple contains
+                    content.contains(keywordRule.keyword.lowercase())
+                }
+            } else {
+                content.contains(keywordRule.keyword.lowercase())
+            }
+            
+            if (matches) {
+                return keywordRule.importance
+            }
+        }
+        
+        // Fallback to default urgent keywords if no user rules match
         for (keyword in defaultUrgentKeywords) {
             if (content.contains(keyword.lowercase())) {
                 return NotificationImportance.URGENT

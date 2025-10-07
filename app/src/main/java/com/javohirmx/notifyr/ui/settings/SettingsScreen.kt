@@ -4,7 +4,20 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +29,7 @@ import androidx.navigation.NavController
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.widget.Toast
+import com.javohirmx.notifyr.ui.navigation.Screen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,7 +88,7 @@ fun SettingsScreen(
                 title = "App Rules",
                 description = "Configure which apps are urgent, normal, or ignored",
                 icon = Icons.Default.Settings,
-                onClick = { /* TODO: Navigate to app rules screen */ }
+                onClick = { navController.navigate(Screen.AppRules.route) }
             )
             
             Spacer(modifier = Modifier.height(8.dp))
@@ -83,7 +97,7 @@ fun SettingsScreen(
                 title = "Keywords",
                 description = "Manage urgent keywords and phrases",
                 icon = Icons.Default.Edit,
-                onClick = { /* TODO: Navigate to keywords screen */ }
+                onClick = { navController.navigate(Screen.KeywordManagement.route) }
             )
             
             Spacer(modifier = Modifier.height(8.dp))
@@ -114,6 +128,15 @@ fun SettingsScreen(
                 description = "Remove notifications older than 7 days",
                 icon = Icons.Default.Clear,
                 onClick = { viewModel.clearOldNotifications() }
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            SettingCard(
+                title = "Digest Notifications",
+                description = "Get periodic summaries of normal notifications",
+                icon = Icons.Default.Notifications,
+                onClick = { viewModel.toggleDigestNotifications() }
             )
             
             Spacer(modifier = Modifier.height(8.dp))
@@ -229,7 +252,7 @@ fun SettingsScreen(
                 title = "Help & Support",
                 description = "Get help using the app",
                 icon = Icons.Default.Info,
-                onClick = { /* TODO: Show help screen */ }
+                onClick = { navController.navigate(Screen.Help.route) }
             )
         }
     }
