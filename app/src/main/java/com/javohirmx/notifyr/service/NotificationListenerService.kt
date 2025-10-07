@@ -12,13 +12,17 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class NotificationListenerService : NotificationListenerService() {
     
-    // TODO: Implement proper dependency injection later
-    // For now, we'll create instances manually for the prototype
-    private lateinit var notificationRepository: NotificationRepository
-    private lateinit var rulesEngine: NotificationRulesEngine
+    @Inject
+    lateinit var notificationRepository: NotificationRepository
+    
+    @Inject
+    lateinit var rulesEngine: NotificationRulesEngine
     
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
