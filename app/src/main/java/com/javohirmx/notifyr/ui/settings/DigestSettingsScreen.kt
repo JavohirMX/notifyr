@@ -12,19 +12,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.javohirmx.notifyr.domain.model.DigestMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DigestSettingsScreen(
-    navController: NavController
+    navController: NavController,
+    viewModel: DigestSettingsViewModel = androidx.hilt.navigation.compose.hiltViewModel()
 ) {
-    var selectedMode by remember { mutableStateOf(DigestMode.CONTEXT_AWARE) }
-    var minNotifications by remember { mutableStateOf(3f) }
-    var unlockDelay by remember { mutableStateOf(30f) }
-    var groupConversations by remember { mutableStateOf(true) }
-    var groupByApp by remember { mutableStateOf(true) }
-    var showSummary by remember { mutableStateOf(true) }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val selectedMode = uiState.selectedMode
+    val minNotifications = uiState.minNotifications
+    val unlockDelay = uiState.unlockDelay
+    val groupConversations = uiState.groupConversations
+    val groupByApp = uiState.groupByApp
+    val showSummary = uiState.showSummary
     
     Scaffold(
         topBar = {
@@ -59,7 +62,7 @@ fun DigestSettingsScreen(
                 DigestModeCard(
                     mode = mode,
                     isSelected = selectedMode == mode,
-                    onClick = { selectedMode = mode }
+                    onClick = { viewModel.selectMode(mode) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -84,7 +87,7 @@ fun DigestSettingsScreen(
                         )
                         Slider(
                             value = minNotifications,
-                            onValueChange = { minNotifications = it },
+                            onValueChange = { viewModel.updateMinNotifications(it) },
                             valueRange = 1f..10f,
                             steps = 8
                         )
@@ -102,7 +105,7 @@ fun DigestSettingsScreen(
                         )
                         Slider(
                             value = unlockDelay,
-                            onValueChange = { unlockDelay = it },
+                            onValueChange = { viewModel.updateUnlockDelay(it) },
                             valueRange = 15f..120f,
                             steps = 6
                         )
@@ -173,7 +176,7 @@ fun DigestSettingsScreen(
                         }
                         Switch(
                             checked = groupConversations,
-                            onCheckedChange = { groupConversations = it }
+                            onCheckedChange = { viewModel.toggleGroupConversations(it) }
                         )
                     }
                     
@@ -197,7 +200,7 @@ fun DigestSettingsScreen(
                         }
                         Switch(
                             checked = groupByApp,
-                            onCheckedChange = { groupByApp = it }
+                            onCheckedChange = { viewModel.toggleGroupByApp(it) }
                         )
                     }
                     
@@ -221,7 +224,7 @@ fun DigestSettingsScreen(
                         }
                         Switch(
                             checked = showSummary,
-                            onCheckedChange = { showSummary = it }
+                            onCheckedChange = { viewModel.toggleShowSummary(it) }
                         )
                     }
                 }

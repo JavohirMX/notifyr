@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
@@ -73,6 +74,22 @@ fun DashboardScreen(
                 color = MaterialTheme.colorScheme.outline,
                 modifier = Modifier.weight(1f)
             )
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // View Digest Button
+        Button(
+            onClick = { navController.navigate(com.javohirmx.notifyr.ui.navigation.Screen.DigestView.route) },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        ) {
+            Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            Text("View Notification Digest", style = MaterialTheme.typography.titleMedium)
         }
         
         Spacer(modifier = Modifier.height(16.dp))

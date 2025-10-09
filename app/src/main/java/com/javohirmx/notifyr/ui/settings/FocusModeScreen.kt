@@ -12,15 +12,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.javohirmx.notifyr.domain.model.FocusMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FocusModeScreen(
-    navController: NavController
+    navController: NavController,
+    viewModel: FocusModeViewModel = androidx.hilt.navigation.compose.hiltViewModel()
 ) {
-    var selectedMode by remember { mutableStateOf(FocusMode.NORMAL) }
-    var autoSwitch by remember { mutableStateOf(false) }
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val selectedMode = uiState.selectedMode
+    val autoSwitch = uiState.autoSwitch
     
     Scaffold(
         topBar = {
@@ -84,7 +87,7 @@ fun FocusModeScreen(
                 FocusModeCard(
                     mode = mode,
                     isSelected = selectedMode == mode,
-                    onClick = { selectedMode = mode }
+                    onClick = { viewModel.selectMode(mode) }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
             }
@@ -113,7 +116,7 @@ fun FocusModeScreen(
                         }
                         Switch(
                             checked = autoSwitch,
-                            onCheckedChange = { autoSwitch = it }
+                            onCheckedChange = { viewModel.toggleAutoSwitch(it) }
                         )
                     }
                     

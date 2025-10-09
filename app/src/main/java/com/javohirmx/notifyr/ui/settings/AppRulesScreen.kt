@@ -240,7 +240,7 @@ fun AppRuleCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val context = LocalContext.current
-                val painter = AppIconUtils.rememberAppIconPainter(context, app.packageName, 64)
+                val painter = AppIconUtils.rememberAppIconPainter(context, app.packageName, 24.dp)
                 Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                     if (painter != null) {
                         Image(painter = painter, contentDescription = null, modifier = Modifier.size(24.dp))

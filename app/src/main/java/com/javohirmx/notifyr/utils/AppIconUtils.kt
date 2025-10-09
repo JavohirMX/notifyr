@@ -16,8 +16,12 @@ import com.javohirmx.notifyr.ui.components.AppIconPlaceholder
 
 object AppIconUtils {
     @Composable
-    fun rememberAppIconPainter(context: Context, packageName: String, sizePx: Int = 64): Painter? {
+    fun rememberAppIconPainter(context: Context, packageName: String, sizeDp: Dp = 24.dp): Painter? {
         val packageManager = context.packageManager
+        // Convert Dp to pixels with proper density scaling for crisp icons
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val sizePx = with(density) { (sizeDp * 2f).roundToPx() } // 2x for high quality
+        
         return remember(packageName, sizePx) {
             try {
                 // Try to get the actual app icon
@@ -51,12 +55,12 @@ object AppIconUtils {
         size: Dp = 24.dp,
         modifier: Modifier = Modifier
     ) {
-        val painter = rememberAppIconPainter(context, packageName, size.value.toInt())
+        val painter = rememberAppIconPainter(context, packageName, size)
         
         if (painter != null) {
             Image(
                 painter = painter,
-                contentDescription = null,
+                contentDescription = "App icon for $appName",
                 modifier = modifier
             )
         } else {
