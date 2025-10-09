@@ -16,8 +16,9 @@ object NotificationModule {
     @Provides
     @Singleton
     fun provideNotificationManager(
-        @ApplicationContext context: Context
+        @ApplicationContext context: Context,
+        nlDigestGenerator: com.javohirmx.notifyr.domain.digest.NaturalLanguageDigestGenerator
     ): NotificationManager {
-        return NotificationManager(context)
+        return NotificationManager(context, nlDigestGenerator)
     }
 }

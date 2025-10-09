@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
@@ -118,9 +117,18 @@ fun SettingsScreen(
         // Smart Features Section
         SettingsSection(title = "Smart Features") {
             SettingCard(
+                title = "ML Smart Learning",
+                description = "Machine learning that learns from your behavior",
+                icon = Icons.Default.Build,
+                onClick = { navController.navigate(Screen.MLSettings.route) }
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            SettingCard(
                 title = "Notification Insights",
                 description = "View your notification patterns and statistics",
-                icon = Icons.Default.Analytics,
+                icon = Icons.Default.Info,
                 onClick = { navController.navigate(Screen.Insights.route) }
             )
             

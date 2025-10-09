@@ -16,10 +16,16 @@ class AppRulesRepositoryTest {
     val instantTaskExecutorRule = InstantTaskExecutorRule()
     
     private lateinit var repository: AppRulesRepository
+    private lateinit var dataStore: androidx.datastore.core.DataStore<com.javohirmx.notifyr.data.datastore.AppSettings>
     
     @Before
     fun setup() {
-        repository = AppRulesRepository()
+        // Create an in-memory DataStore for testing
+        dataStore = androidx.datastore.core.DataStoreFactory.create(
+            serializer = com.javohirmx.notifyr.data.datastore.SettingsSerializer,
+            produceFile = { java.io.File.createTempFile("test_settings", ".json") }
+        )
+        repository = AppRulesRepository(dataStore)
     }
     
     @Test

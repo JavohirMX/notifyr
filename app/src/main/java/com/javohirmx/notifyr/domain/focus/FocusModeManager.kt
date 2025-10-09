@@ -76,7 +76,7 @@ class FocusModeManager @Inject constructor(
         val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
         
         // Check sleep hours
-        if (settings.sleepHours.contains(hour, minute)) {
+        if (settings.sleepHours.isInRange(hour, minute)) {
             _currentMode.value = FocusMode.SLEEP
             return FocusMode.SLEEP
         }
@@ -84,7 +84,7 @@ class FocusModeManager @Inject constructor(
         // Check work hours (only on work days)
         if (settings.workHours != null && 
             settings.workDays.contains(dayOfWeek) &&
-            settings.workHours.contains(hour, minute)) {
+            settings.workHours.isInRange(hour, minute)) {
             _currentMode.value = FocusMode.WORK
             return FocusMode.WORK
         }
@@ -179,7 +179,7 @@ class FocusModeManager @Inject constructor(
         val hour = calendar.get(Calendar.HOUR_OF_DAY)
         val minute = calendar.get(Calendar.MINUTE)
         
-        return quietHours.contains(hour, minute)
+        return quietHours.isInRange(hour, minute)
     }
     
     /**

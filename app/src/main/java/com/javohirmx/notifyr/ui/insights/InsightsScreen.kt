@@ -111,7 +111,7 @@ fun InsightsContent(
                 )
                 StatCard(
                     title = "Urgent",
-                    value = insights.urgentCount.toString(),
+                    value = insights.urgentNotifications.toString(),
                     icon = Icons.Default.Warning,
                     iconTint = MaterialTheme.colorScheme.error,
                     modifier = Modifier.weight(1f)
@@ -127,14 +127,14 @@ fun InsightsContent(
                 StatCard(
                     title = "Filtered",
                     value = "${insights.spamFilteredPercentage}%",
-                    icon = Icons.Default.FilterAlt,
+                    icon = Icons.Default.CheckCircle,
                     iconTint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.weight(1f)
                 )
                 StatCard(
                     title = "Time Saved",
                     value = "${insights.estimatedTimeSavedMinutes}m",
-                    icon = Icons.Default.AccessTime,
+                    icon = Icons.Default.Star,
                     iconTint = MaterialTheme.colorScheme.tertiary,
                     modifier = Modifier.weight(1f)
                 )
@@ -169,7 +169,7 @@ fun InsightsContent(
                         }
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "You filtered out ${insights.ignoredCount} spam notifications (${insights.spamFilteredPercentage}%), " +
+                            "You filtered out ${insights.ignoredNotifications} spam notifications (${insights.spamFilteredPercentage}%), " +
                             "saving you approximately ${insights.estimatedTimeSavedMinutes} minutes of distraction.",
                             style = MaterialTheme.typography.bodyMedium
                         )
@@ -190,9 +190,9 @@ fun InsightsContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(Modifier.height(8.dp))
-                        insights.peakNotificationHours.forEach { hour ->
+                        insights.peakNotificationHours.forEach { hourStat ->
                             Text(
-                                "• ${formatHour(hour)}",
+                                "• ${formatHour(hourStat.hour)} (${hourStat.count} notifications)",
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.Medium
                             )
@@ -231,13 +231,13 @@ fun InsightsContent(
             }
         }
         
-        // Top important apps
-        if (insights.topImportantApps.isNotEmpty()) {
+        // Top urgent apps
+        if (insights.topUrgentApps.isNotEmpty()) {
             item {
-                SectionHeader("⭐ Most Important Apps")
+                SectionHeader("⭐ Most Urgent Apps")
                 Card {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        insights.topImportantApps.take(3).forEach { app ->
+                        insights.topUrgentApps.take(3).forEach { app ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -261,35 +261,24 @@ fun InsightsContent(
         }
         
         // Active conversations
-        if (insights.mostActiveConversations.isNotEmpty()) {
+        if (insights.activeConversationCount > 0) {
             item {
-                SectionHeader("💬 Most Active Conversations")
+                SectionHeader("💬 Active Conversations")
                 Card {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        insights.mostActiveConversations.take(3).forEach { conv ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column {
-                                    Text(
-                                        conv.sender,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        conv.appName,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Text(
-                                    "${conv.messageCount} messages",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                "Active conversations",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                "${insights.activeConversationCount} conversations",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         }
                     }
                 }

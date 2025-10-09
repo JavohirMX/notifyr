@@ -34,6 +34,9 @@ class NotificationListenerService : NotificationListenerService() {
     lateinit var enhancedRulesEngine: EnhancedNotificationRulesEngine
     
     @Inject
+    lateinit var hybridClassifier: com.javohirmx.notifyr.domain.ml.HybridNotificationClassifier
+    
+    @Inject
     lateinit var customNotificationManager: NotificationManager
     
     @Inject
@@ -152,11 +155,8 @@ class NotificationListenerService : NotificationListenerService() {
             timestamp = timestamp
         )
         
-        // Apply OLD rules engine for backward compatibility (sets importance)
-        val classifiedNotification = rulesEngine.classifyNotification(notificationData)
-        
-        // Apply ENHANCED rules engine for smart tags
-        val enhancedNotification = enhancedRulesEngine.classifyNotificationWithTags(classifiedNotification)
+        // Use HYBRID ML+Rules classifier for smart classification
+        val enhancedNotification = hybridClassifier.classify(notificationData)
         
         // Check focus mode - should we show this notification?
         val currentFocusMode = focusModeManager.getCurrentMode()

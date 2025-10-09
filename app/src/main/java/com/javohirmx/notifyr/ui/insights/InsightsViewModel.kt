@@ -40,7 +40,7 @@ class InsightsViewModel @Inject constructor(
             )
             
             try {
-                val insights = generateInsightsUseCase.generateInsights(timeRange)
+                val insights = generateInsightsUseCase(timeRange.getDurationMillis())
                 _uiState.value = _uiState.value.copy(
                     insights = insights,
                     isLoading = false

@@ -59,7 +59,7 @@ data class TimeRange(
     val endHour: Int,       // 0-23
     val endMinute: Int      // 0-59
 ) {
-    fun contains(hour: Int, minute: Int): Boolean {
+    fun isInRange(hour: Int, minute: Int): Boolean {
         val currentMinutes = hour * 60 + minute
         val startMinutes = startHour * 60 + startMinute
         val endMinutes = endHour * 60 + endMinute

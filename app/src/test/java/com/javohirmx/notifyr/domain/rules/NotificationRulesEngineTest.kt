@@ -15,8 +15,14 @@ class NotificationRulesEngineTest {
     
     @Before
     fun setup() {
+        // Create an in-memory DataStore for testing
+        val dataStore = androidx.datastore.core.DataStoreFactory.create(
+            serializer = com.javohirmx.notifyr.data.datastore.SettingsSerializer,
+            produceFile = { java.io.File.createTempFile("test_settings", ".json") }
+        )
+        
         // Use real repositories for testing since they have in-memory state
-        appRulesRepository = AppRulesRepository()
+        appRulesRepository = AppRulesRepository(dataStore)
         keywordRulesRepository = KeywordRulesRepository()
         
         // Clear all rules to start with clean state
