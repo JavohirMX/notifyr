@@ -107,7 +107,7 @@ fun SettingsScreen(
                 title = "Contacts",
                 description = "Mark specific contacts as always urgent",
                 icon = Icons.Default.Person,
-                onClick = { /* TODO: Navigate to contacts screen */ }
+                onClick = { navController.navigate(Screen.Help.route + "?section=contacts") }
             )
         }
         
@@ -119,7 +119,7 @@ fun SettingsScreen(
                 title = "Notification History",
                 description = "${uiState.totalNotifications} notifications stored",
                 icon = Icons.Default.List,
-                onClick = { /* TODO: Navigate to history management */ }
+                onClick = { navController.navigate(Screen.History.route) }
             )
             
             Spacer(modifier = Modifier.height(8.dp))
@@ -137,7 +137,7 @@ fun SettingsScreen(
                 title = "Clear Old Notifications",
                 description = "Remove notifications older than 7 days",
                 icon = Icons.Default.Clear,
-                onClick = { viewModel.clearOldNotifications() }
+                onClick = { showClearDialog = true }
             )
             
             Spacer(modifier = Modifier.height(8.dp))
@@ -157,6 +157,32 @@ fun SettingsScreen(
                 icon = Icons.Default.Delete,
                 onClick = { showClearDialog = true },
                 isDestructive = true
+            )
+        }
+        if (showClearDialog) {
+            AlertDialog(
+                onDismissRequest = { showClearDialog = false },
+                confirmButton = {
+                    TextButton(onClick = {
+                        showClearDialog = false
+                        viewModel.clearOldNotifications()
+                    }) { Text("Clear") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showClearDialog = false }) { Text("Cancel") }
+                },
+                title = { Text("Clear Old Notifications") },
+                text = { Text("Remove notifications older than 7 days? This cannot be undone.") }
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        SettingsSection(title = "Legal") {
+            SettingCard(
+                title = "Privacy Policy",
+                description = "Read how we handle your data",
+                icon = Icons.Default.Info,
+                onClick = { navController.navigate(Screen.Help.route + "?section=privacy") }
             )
         }
         

@@ -3,6 +3,7 @@ package com.javohirmx.notifyr.ui.settings
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -20,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.javohirmx.notifyr.utils.AppIconUtils
 import androidx.navigation.NavController
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -237,7 +239,14 @@ fun AppRuleCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                val context = LocalContext.current
+                val painter = AppIconUtils.rememberAppIconPainter(context, app.packageName, 64)
+                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    if (painter != null) {
+                        Image(painter = painter, contentDescription = null, modifier = Modifier.size(24.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = app.appName,
                         style = MaterialTheme.typography.titleMedium,
@@ -254,6 +263,7 @@ fun AppRuleCard(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
+                    }
                     }
                 }
                 

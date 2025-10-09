@@ -14,7 +14,9 @@ import javax.inject.Inject
 
 data class OnboardingUiState(
     val isNotificationListenerEnabled: Boolean = false,
-    val isOnboardingCompleted: Boolean = false
+    val isOnboardingCompleted: Boolean = false,
+    val hasPostNotificationsPermission: Boolean = true,
+    val areNotificationsEnabledGlobally: Boolean = true
 )
 
 @HiltViewModel
@@ -35,8 +37,12 @@ class OnboardingViewModel @Inject constructor(
     fun checkPermissions() {
         viewModelScope.launch {
             val isEnabled = PermissionUtils.isNotificationListenerEnabled(context)
+            val hasPostNotifs = PermissionUtils.hasPostNotificationsPermission(context)
+            val areEnabledGlobally = PermissionUtils.areNotificationsEnabled(context)
             _uiState.value = _uiState.value.copy(
-                isNotificationListenerEnabled = isEnabled
+                isNotificationListenerEnabled = isEnabled,
+                hasPostNotificationsPermission = hasPostNotifs,
+                areNotificationsEnabledGlobally = areEnabledGlobally
             )
         }
     }

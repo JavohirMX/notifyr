@@ -3,8 +3,12 @@ package com.javohirmx.notifyr.utils
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.provider.Settings
 import android.text.TextUtils
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
+import android.Manifest
 
 object PermissionUtils {
     
@@ -57,5 +61,26 @@ object PermissionUtils {
         val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
+    }
+
+    /**
+     * Check if POST_NOTIFICATIONS permission is granted (Android 13+). Returns true on older SDKs.
+     */
+    fun hasPostNotificationsPermission(context: Context): Boolean {
+        return if (android.os.Build.VERSION.SDK_INT < 33) {
+            true
+        } else {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+    
+    /**
+     * Best-effort check if notifications are enabled for the app (covers OEM toggles too).
+     */
+    fun areNotificationsEnabled(context: Context): Boolean {
+        return NotificationManagerCompat.from(context).areNotificationsEnabled()
     }
 }

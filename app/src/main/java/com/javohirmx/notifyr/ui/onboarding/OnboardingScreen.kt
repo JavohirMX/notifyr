@@ -27,6 +27,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.javohirmx.notifyr.ui.navigation.Screen
 import com.javohirmx.notifyr.utils.PermissionUtils
 import kotlinx.coroutines.launch
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.Manifest
 
 data class OnboardingPage(
     val title: String,
@@ -45,8 +48,14 @@ fun OnboardingScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    
-    val pages = remember {
+
+    val requestPostNotifications = if (android.os.Build.VERSION.SDK_INT >= 33) {
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
+            viewModel.checkPermissions()
+        }
+    } else null
+
+    val pages = remember(uiState.isNotificationListenerEnabled, uiState.hasPostNotificationsPermission, uiState.areNotificationsEnabledGlobally) {
         listOf(
             OnboardingPage(
                 title = "Welcome to Notifyr",
@@ -81,12 +90,32 @@ fun OnboardingScreen(
                 action = if (!uiState.isNotificationListenerEnabled) {
                     { PermissionUtils.openNotificationListenerSettings(context) }
                 } else null
+            ),
+            OnboardingPage(
+                title = "Allow App Notifications",
+                description = "Allow Notifyr to post important notifications to you (Android 13+).",
+                icon = Icons.Default.Notifications,
+                actionText = if (uiState.hasPostNotificationsPermission && uiState.areNotificationsEnabledGlobally) "Allowed ✓" else "Allow",
+                action = {
+                    if (android.os.Build.VERSION.SDK_INT >= 33) {
+                        // Request POST_NOTIFICATIONS at runtime
+                        requestPostNotifications?.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        // Older versions: open app notification settings if disabled
+                        if (!uiState.areNotificationsEnabledGlobally) {
+                            context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            })
+                        }
+                    }
+                }
             )
         )
     }
     
     val pagerState = rememberPagerState(pageCount = { pages.size })
-    
+
     LaunchedEffect(Unit) {
         viewModel.checkPermissions()
     }

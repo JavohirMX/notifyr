@@ -1,6 +1,7 @@
 package com.javohirmx.notifyr.ui.dashboard
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -11,6 +12,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import com.javohirmx.notifyr.utils.AppIconUtils
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -89,12 +92,19 @@ fun DashboardScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(uiState.recentUrgentNotifications) { notification ->
+                    val context = LocalContext.current
+                    val painter = AppIconUtils.rememberAppIconPainter(context, notification.packageName, 64)
                     NotificationCard(
                         title = notification.title,
                         text = notification.text,
                         appName = notification.appName,
                         timestamp = notification.timestamp,
-                        importance = notification.importance
+                        importance = notification.importance,
+                        leadingIcon = {
+                            if (painter != null) {
+                                Image(painter = painter, contentDescription = null, modifier = Modifier.size(24.dp))
+                            }
+                        }
                     )
                 }
             }
@@ -227,7 +237,8 @@ fun NotificationCard(
     text: String,
     appName: String,
     timestamp: Long,
-    importance: NotificationImportance
+    importance: NotificationImportance,
+    leadingIcon: (@Composable () -> Unit)? = null
 ) {
     Card {
         Column(
@@ -240,12 +251,17 @@ fun NotificationCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.Top
             ) {
-                Text(
-                    text = appName,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f)
-                )
+                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    if (leadingIcon != null) {
+                        leadingIcon()
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text(
+                        text = appName,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
                 Text(
                     text = formatTimestamp(timestamp),
                     style = MaterialTheme.typography.labelSmall,

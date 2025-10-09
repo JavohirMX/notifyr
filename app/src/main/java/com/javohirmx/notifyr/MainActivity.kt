@@ -20,6 +20,7 @@ import com.javohirmx.notifyr.ui.navigation.NotifyrNavigation
 import com.javohirmx.notifyr.ui.navigation.Screen
 import com.javohirmx.notifyr.ui.theme.NotifyrTheme
 import dagger.hilt.android.AndroidEntryPoint
+import androidx.navigation.compose.currentBackStackEntryAsState
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -51,7 +52,9 @@ fun NotifyrApp() {
     }
     
     startDestination?.let { destination ->
-        val isOnboarding = destination == Screen.Onboarding.route
+        val navBackStackEntry by navController.currentBackStackEntryAsState()
+        val currentRoute = navBackStackEntry?.destination?.route ?: destination
+        val isOnboarding = currentRoute == Screen.Onboarding.route
         
         if (isOnboarding) {
             // Show onboarding without bottom navigation
@@ -65,7 +68,10 @@ fun NotifyrApp() {
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
                 bottomBar = {
-                    BottomNavigationBar(navController = navController)
+                    // Hide bottom bar if navigating to onboarding again for any reason
+                    if (!isOnboarding) {
+                        BottomNavigationBar(navController = navController)
+                    }
                 }
             ) { innerPadding ->
                 NotifyrNavigation(
