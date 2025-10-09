@@ -22,7 +22,9 @@ object DatabaseModule {
             context,
             NotifyrDatabase::class.java,
             NotifyrDatabase.DATABASE_NAME
-        ).build()
+        )
+        .addMigrations(NotifyrDatabase.MIGRATION_1_2)
+        .build()
     }
     
     @Provides

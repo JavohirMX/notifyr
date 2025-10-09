@@ -12,5 +12,9 @@ data class NotificationData(
     val category: String?,
     val importance: NotificationImportance,
     val timestamp: Long,
-    val isRead: Boolean = false
+    val isRead: Boolean = false,
+    // New enhanced fields
+    val tags: NotificationTags = NotificationTags(),
+    val sender: String? = null,  // Extracted sender for messaging apps
+    val conversationId: String? = null  // For grouping related notifications
 )

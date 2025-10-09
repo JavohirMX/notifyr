@@ -114,6 +114,27 @@ fun SettingsScreen(
         
         Spacer(modifier = Modifier.height(24.dp))
         
+        // Smart Features Section
+        SettingsSection(title = "Smart Features") {
+            SettingCard(
+                title = "Focus Modes",
+                description = "Control notifications based on your context",
+                icon = Icons.Default.Notifications,
+                onClick = { navController.navigate(Screen.FocusMode.route) }
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            SettingCard(
+                title = "Digest Settings",
+                description = "Configure how notification digests are delivered",
+                icon = Icons.Default.List,
+                onClick = { navController.navigate(Screen.DigestSettings.route) }
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+        
         // Data Management Section
         SettingsSection(title = "Data Management") {
             SettingCard(

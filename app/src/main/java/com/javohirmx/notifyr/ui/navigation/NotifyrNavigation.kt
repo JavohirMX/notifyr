@@ -15,6 +15,8 @@ import com.javohirmx.notifyr.ui.settings.DataManagementScreen
 import com.javohirmx.notifyr.ui.onboarding.OnboardingScreen
 import com.javohirmx.notifyr.ui.settings.PrivacyPolicyScreen
 import com.javohirmx.notifyr.ui.settings.ContactsScreen
+import com.javohirmx.notifyr.ui.settings.FocusModeScreen
+import com.javohirmx.notifyr.ui.settings.DigestSettingsScreen
 
 @Composable
 fun NotifyrNavigation(
@@ -68,6 +70,14 @@ fun NotifyrNavigation(
         composable(Screen.Onboarding.route) {
             OnboardingScreen(navController = navController)
         }
+        
+        composable(Screen.FocusMode.route) {
+            FocusModeScreen(navController = navController)
+        }
+        
+        composable(Screen.DigestSettings.route) {
+            DigestSettingsScreen(navController = navController)
+        }
     }
 }
 
@@ -82,4 +92,6 @@ sealed class Screen(val route: String, val title: String) {
     object Onboarding : Screen("onboarding", "Welcome")
     object PrivacyPolicy : Screen("privacy_policy", "Privacy Policy")
     object Contacts : Screen("contacts", "Contacts")
+    object FocusMode : Screen("focus_mode", "Focus Modes")
+    object DigestSettings : Screen("digest_settings", "Digest Settings")
 }

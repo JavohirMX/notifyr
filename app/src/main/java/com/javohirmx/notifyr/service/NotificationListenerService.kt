@@ -5,8 +5,12 @@ import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.javohirmx.notifyr.data.repository.NotificationRepository
+import com.javohirmx.notifyr.domain.digest.SmartDigestScheduler
+import com.javohirmx.notifyr.domain.focus.FocusModeManager
 import com.javohirmx.notifyr.domain.model.NotificationData
 import com.javohirmx.notifyr.domain.model.NotificationImportance
+import com.javohirmx.notifyr.domain.model.shouldShowImmediately
+import com.javohirmx.notifyr.domain.rules.EnhancedNotificationRulesEngine
 import com.javohirmx.notifyr.domain.rules.NotificationRulesEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,12 +29,32 @@ class NotificationListenerService : NotificationListenerService() {
     lateinit var rulesEngine: NotificationRulesEngine
     
     @Inject
+    lateinit var enhancedRulesEngine: EnhancedNotificationRulesEngine
+    
+    @Inject
     lateinit var customNotificationManager: NotificationManager
+    
+    @Inject
+    lateinit var focusModeManager: FocusModeManager
+    
+    @Inject
+    lateinit var digestScheduler: SmartDigestScheduler
     
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     companion object {
         private const val TAG = "NotificationListener"
+    }
+    
+    override fun onCreate() {
+        super.onCreate()
+        // Initialize digest scheduler
+        digestScheduler.initialize()
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        digestScheduler.shutdown()
     }
     
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -56,6 +80,7 @@ class NotificationListenerService : NotificationListenerService() {
     private suspend fun processNotification(sbn: StatusBarNotification) {
         val notification = sbn.notification
         val packageName = sbn.packageName
+        val notificationKey = sbn.key
         
         // Skip our own notifications to avoid loops
         if (packageName == this.packageName) {
@@ -68,10 +93,16 @@ class NotificationListenerService : NotificationListenerService() {
             return
         }
         
+        // Don't suppress ongoing notifications (music players, calls, etc.) - let them through
+        val isOngoing = (notification.flags and android.app.Notification.FLAG_ONGOING_EVENT) != 0
+        val category = notification.category
+        val isCall = category == android.app.Notification.CATEGORY_CALL || category == "call"
+        val isMedia = category == android.app.Notification.CATEGORY_TRANSPORT || category == "transport"
+        val shouldPreserveOriginal = isOngoing || isCall || isMedia
+        
         // Extract notification data
         val title = notification.extras.getCharSequence("android.title")?.toString() ?: ""
         val text = notification.extras.getCharSequence("android.text")?.toString() ?: ""
-        val category = notification.category
         val timestamp = sbn.postTime
         
         // Get app name
@@ -94,27 +125,65 @@ class NotificationListenerService : NotificationListenerService() {
             timestamp = timestamp
         )
         
-        // Apply rules engine to classify importance
+        // Apply OLD rules engine for backward compatibility (sets importance)
         val classifiedNotification = rulesEngine.classifyNotification(notificationData)
         
-        // Deduplication window: larger for ongoing events/media/calls
-        val isOngoing = (notification.flags and android.app.Notification.FLAG_ONGOING_EVENT) != 0
-        val isCall = category == android.app.Notification.CATEGORY_CALL || category == "call"
-        val isMedia = category == android.app.Notification.CATEGORY_TRANSPORT || category == "transport"
+        // Apply ENHANCED rules engine for smart tags
+        val enhancedNotification = enhancedRulesEngine.classifyNotificationWithTags(classifiedNotification)
+        
+        // Check focus mode - should we show this notification?
+        val currentFocusMode = focusModeManager.getCurrentMode()
+        val allowedByFocusMode = focusModeManager.shouldShowNotification(enhancedNotification, currentFocusMode)
+        
+        // Deduplication window
         val dedupWindowMs = when {
             isCall -> 15_000L
             isOngoing || isMedia -> 60_000L
             else -> 3_000L
         }
-        // Store with deduplication
-        notificationRepository.upsertWithDedup(classifiedNotification, dedupWindowMs)
         
-        // Handle urgent notifications
-        if (classifiedNotification.importance == NotificationImportance.URGENT) {
-            handleUrgentNotification(classifiedNotification)
+        // Store with deduplication
+        notificationRepository.upsertWithDedup(enhancedNotification, dedupWindowMs)
+        
+        // NOTIFICATION SUPPRESSION LOGIC
+        if (!shouldPreserveOriginal) {
+            // Cancel original notification based on importance and focus mode
+            when {
+                // URGENT: Cancel original, show our enhanced version
+                enhancedNotification.importance == NotificationImportance.URGENT && allowedByFocusMode -> {
+                    cancelNotification(notificationKey)
+                    handleUrgentNotification(enhancedNotification)
+                    Log.d(TAG, "Suppressed original, showing urgent: $appName - $title")
+                }
+                
+                // NORMAL: Cancel original, add to digest
+                enhancedNotification.importance == NotificationImportance.NORMAL -> {
+                    cancelNotification(notificationKey)
+                    // Will be shown in digest
+                    Log.d(TAG, "Suppressed normal notification: $appName - $title")
+                    
+                    // Trigger digest check
+                    digestScheduler.checkAndShowDigest()
+                }
+                
+                // IGNORE: Cancel original, silently archive
+                enhancedNotification.importance == NotificationImportance.IGNORE -> {
+                    cancelNotification(notificationKey)
+                    Log.d(TAG, "Suppressed ignored notification: $appName - $title")
+                }
+                
+                // Blocked by focus mode: Cancel and archive
+                !allowedByFocusMode -> {
+                    cancelNotification(notificationKey)
+                    Log.d(TAG, "Suppressed by focus mode ($currentFocusMode): $appName - $title")
+                }
+            }
+        } else {
+            // Preserve ongoing notifications but still log them
+            Log.d(TAG, "Preserved ongoing notification: $appName - $title")
         }
         
-        Log.d(TAG, "Processed notification: $appName - $title (${classifiedNotification.importance})")
+        Log.d(TAG, "Processed: $appName | ${enhancedNotification.importance} | Tags: ${enhancedNotification.tags.priority}, ${enhancedNotification.tags.contexts}")
     }
     
     private fun handleUrgentNotification(notification: NotificationData) {

@@ -12,6 +12,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.javohirmx.notifyr.MainActivity
 import com.javohirmx.notifyr.R
+import com.javohirmx.notifyr.domain.model.EnhancedDigest
 import com.javohirmx.notifyr.domain.model.NotificationData
 import com.javohirmx.notifyr.domain.model.NotificationImportance
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -230,6 +231,75 @@ class NotificationManager @Inject constructor(
             notificationManager.notify(DIGEST_NOTIFICATION_ID, notificationBuilder.build())
         } catch (e: SecurityException) {
             android.util.Log.w("NotificationManager", "Failed to show digest notification", e)
+        }
+    }
+    
+    /**
+     * Show enhanced digest notification with smart grouping and summary
+     */
+    fun showEnhancedDigestNotification(digest: EnhancedDigest) {
+        if (digest.totalCount == 0) return
+        
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            putExtra("open_tab", "digest")
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        
+        val inboxStyle = NotificationCompat.InboxStyle()
+            .setBigContentTitle("📬 ${digest.timeRange}")
+            .setSummaryText(digest.summary.summaryText)
+        
+        // Show priority items first
+        if (digest.needsAttention.isNotEmpty()) {
+            inboxStyle.addLine("⭐ ${digest.needsAttention.size} need attention")
+            digest.needsAttention.take(2).forEach {
+                inboxStyle.addLine("  ${it.appName}: ${it.title}")
+            }
+        }
+        
+        // Show conversations
+        if (digest.conversations.isNotEmpty()) {
+            digest.conversations.take(3).forEach { conv ->
+                val preview = if (conv.messageCount > 1) {
+                    "${conv.sender} sent ${conv.messageCount} messages"
+                } else {
+                    "${conv.sender}: ${conv.latestMessage}"
+                }
+                inboxStyle.addLine("💬 $preview")
+            }
+        }
+        
+        // Show other apps
+        if (digest.appGroups.isNotEmpty()) {
+            digest.appGroups.take(2).forEach { group ->
+                if (group.appName !in digest.conversations.map { it.appName }) {
+                    inboxStyle.addLine("📱 ${group.appName} (${group.notificationCount})")
+                }
+            }
+        }
+        
+        val notificationBuilder = NotificationCompat.Builder(context, DIGEST_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification_normal)
+            .setContentTitle("Notification Digest")
+            .setContentText(digest.summary.summaryText)
+            .setStyle(inboxStyle)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setNumber(digest.totalCount)
+            .setOnlyAlertOnce(true)
+        
+        try {
+            notificationManager.notify(DIGEST_NOTIFICATION_ID, notificationBuilder.build())
+        } catch (e: SecurityException) {
+            android.util.Log.w("NotificationManager", "Failed to show enhanced digest notification", e)
         }
     }
     

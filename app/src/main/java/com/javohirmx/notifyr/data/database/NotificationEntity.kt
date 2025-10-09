@@ -2,8 +2,10 @@ package com.javohirmx.notifyr.data.database
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import com.javohirmx.notifyr.domain.model.NotificationData
-import com.javohirmx.notifyr.domain.model.NotificationImportance
+import com.javohirmx.notifyr.domain.model.*
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.decodeFromString
 
 @Entity(tableName = "notifications")
 data class NotificationEntity(
@@ -16,11 +18,21 @@ data class NotificationEntity(
     val category: String?,
     val importance: Int, // Store as Int for Room compatibility
     val timestamp: Long,
-    val isRead: Boolean = false
+    val isRead: Boolean = false,
+    // New enhanced fields
+    val tagsJson: String? = null,  // JSON serialized NotificationTags
+    val sender: String? = null,
+    val conversationId: String? = null
 )
 
 // Extension functions for conversion
 fun NotificationEntity.toDomain(): NotificationData {
+    val tags = try {
+        tagsJson?.let { Json.decodeFromString<NotificationTags>(it) } ?: NotificationTags()
+    } catch (e: Exception) {
+        NotificationTags()
+    }
+    
     return NotificationData(
         id = id,
         packageName = packageName,
@@ -30,11 +42,20 @@ fun NotificationEntity.toDomain(): NotificationData {
         category = category,
         importance = NotificationImportance.fromValue(importance),
         timestamp = timestamp,
-        isRead = isRead
+        isRead = isRead,
+        tags = tags,
+        sender = sender,
+        conversationId = conversationId
     )
 }
 
 fun NotificationData.toEntity(): NotificationEntity {
+    val tagsJson = try {
+        Json.encodeToString(tags)
+    } catch (e: Exception) {
+        null
+    }
+    
     return NotificationEntity(
         id = id,
         packageName = packageName,
@@ -44,6 +65,9 @@ fun NotificationData.toEntity(): NotificationEntity {
         category = category,
         importance = importance.value,
         timestamp = timestamp,
-        isRead = isRead
+        isRead = isRead,
+        tagsJson = tagsJson,
+        sender = sender,
+        conversationId = conversationId
     )
 }
