@@ -93,7 +93,6 @@ fun DashboardScreen(
             ) {
                 items(uiState.recentUrgentNotifications) { notification ->
                     val context = LocalContext.current
-                    val painter = AppIconUtils.rememberAppIconPainter(context, notification.packageName, 64)
                     NotificationCard(
                         title = notification.title,
                         text = notification.text,
@@ -101,9 +100,13 @@ fun DashboardScreen(
                         timestamp = notification.timestamp,
                         importance = notification.importance,
                         leadingIcon = {
-                            if (painter != null) {
-                                Image(painter = painter, contentDescription = null, modifier = Modifier.size(24.dp))
-                            }
+                            AppIconUtils.AppIconOrPlaceholder(
+                                context = context,
+                                packageName = notification.packageName,
+                                appName = notification.appName,
+                                size = 24.dp,
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
                     )
                 }

@@ -223,17 +223,6 @@ fun NotificationHistoryCard(
 ) {
     val context = LocalContext.current
     val packageManager = context.packageManager
-    val appIconPainter = remember(notification.packageName) {
-        try {
-            val drawable = packageManager.getApplicationIcon(notification.packageName)
-            val bitmap = drawable.toBitmap(width = 64, height = 64, config = android.graphics.Bitmap.Config.ARGB_8888)
-            BitmapPainter(bitmap.asImageBitmap())
-        } catch (e: Exception) {
-            val fallback = androidx.core.content.ContextCompat.getDrawable(context, android.R.drawable.sym_def_app_icon)
-            val bitmap = fallback?.toBitmap(width = 64, height = 64, config = android.graphics.Bitmap.Config.ARGB_8888)
-            if (bitmap != null) BitmapPainter(bitmap.asImageBitmap()) else null
-        }
-    }
     val onOpenApp = remember(notification.packageName) {
         {
             try {
@@ -269,14 +258,14 @@ fun NotificationHistoryCard(
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (appIconPainter != null) {
-                        Image(
-                        painter = appIconPainter,
-                        contentDescription = null,
+                    com.javohirmx.notifyr.utils.AppIconUtils.AppIconOrPlaceholder(
+                        context = context,
+                        packageName = notification.packageName,
+                        appName = notification.appName,
+                        size = 24.dp,
                         modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = notification.appName,
                         style = MaterialTheme.typography.labelMedium,
