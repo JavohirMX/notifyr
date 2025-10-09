@@ -58,5 +58,3 @@ fun PrivacyPolicyScreen(navController: NavController) {
         }
     }
 }
-
-

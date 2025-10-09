@@ -39,7 +39,8 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    var showClearDialog by remember { mutableStateOf(false) }
+    var showClearOldDialog by remember { mutableStateOf(false) }
+    var showClearAllDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     
     // Show toast when developer mode is activated
@@ -107,7 +108,7 @@ fun SettingsScreen(
                 title = "Contacts",
                 description = "Mark specific contacts as always urgent",
                 icon = Icons.Default.Person,
-                onClick = { navController.navigate(Screen.Help.route + "?section=contacts") }
+                onClick = { navController.navigate(Screen.Contacts.route) }
             )
         }
         
@@ -137,7 +138,7 @@ fun SettingsScreen(
                 title = "Clear Old Notifications",
                 description = "Remove notifications older than 7 days",
                 icon = Icons.Default.Clear,
-                onClick = { showClearDialog = true }
+                onClick = { showClearOldDialog = true }
             )
             
             Spacer(modifier = Modifier.height(8.dp))
@@ -155,36 +156,12 @@ fun SettingsScreen(
                 title = "Clear All Data",
                 description = "Delete all notification history",
                 icon = Icons.Default.Delete,
-                onClick = { showClearDialog = true },
+                onClick = { showClearAllDialog = true },
                 isDestructive = true
-            )
-        }
-        if (showClearDialog) {
-            AlertDialog(
-                onDismissRequest = { showClearDialog = false },
-                confirmButton = {
-                    TextButton(onClick = {
-                        showClearDialog = false
-                        viewModel.clearOldNotifications()
-                    }) { Text("Clear") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showClearDialog = false }) { Text("Cancel") }
-                },
-                title = { Text("Clear Old Notifications") },
-                text = { Text("Remove notifications older than 7 days? This cannot be undone.") }
             )
         }
         
         Spacer(modifier = Modifier.height(24.dp))
-        SettingsSection(title = "Legal") {
-            SettingCard(
-                title = "Privacy Policy",
-                description = "Read how we handle your data",
-                icon = Icons.Default.Info,
-                onClick = { navController.navigate(Screen.Help.route + "?section=privacy") }
-            )
-        }
         
         // Developer Mode Section (Hidden by default)
         if (uiState.isDeveloperModeEnabled) {
@@ -293,10 +270,36 @@ fun SettingsScreen(
         }
     }
     
-    // Clear All Data Confirmation Dialog
-    if (showClearDialog) {
+    // Clear Old Notifications Dialog
+    if (showClearOldDialog) {
         AlertDialog(
-            onDismissRequest = { showClearDialog = false },
+            onDismissRequest = { showClearOldDialog = false },
+            title = { Text("Clear Old Notifications") },
+            text = { 
+                Text("Remove notifications older than 7 days? This cannot be undone.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearOldNotifications()
+                        showClearOldDialog = false
+                    }
+                ) {
+                    Text("Clear")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearOldDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+    
+    // Clear All Data Confirmation Dialog
+    if (showClearAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearAllDialog = false },
             title = { Text("Clear All Data") },
             text = { 
                 Text("This will permanently delete all notification history. This action cannot be undone.")
@@ -305,14 +308,14 @@ fun SettingsScreen(
                 TextButton(
                     onClick = {
                         viewModel.clearAllNotifications()
-                        showClearDialog = false
+                        showClearAllDialog = false
                     }
                 ) {
                     Text("Clear All", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showClearDialog = false }) {
+                TextButton(onClick = { showClearAllDialog = false }) {
                     Text("Cancel")
                 }
             }
