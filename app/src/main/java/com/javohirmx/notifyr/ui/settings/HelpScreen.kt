@@ -240,14 +240,28 @@ fun HelpScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             OutlinedButton(
-                                onClick = { /* TODO: Open email */ }
+                                onClick = {
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_SENDTO).apply {
+                                        data = android.net.Uri.parse("mailto:")
+                                        putExtra(android.content.Intent.EXTRA_EMAIL, arrayOf("support@notifyr.app"))
+                                        putExtra(android.content.Intent.EXTRA_SUBJECT, "Notifyr Support")
+                                    }
+                                    try {
+                                        navController.context.startActivity(intent)
+                                    } catch (_: Exception) { }
+                                }
                             ) {
                                 Icon(Icons.Default.Email, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Email Support")
                             }
                             OutlinedButton(
-                                onClick = { /* TODO: Open feedback */ }
+                                onClick = {
+                                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://github.com/javohirmx/Notifyr/issues"))
+                                    try {
+                                        navController.context.startActivity(intent)
+                                    } catch (_: Exception) { }
+                                }
                             ) {
                                 Icon(Icons.Default.Send, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))

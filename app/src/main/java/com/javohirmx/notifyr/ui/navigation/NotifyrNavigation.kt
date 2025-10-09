@@ -13,6 +13,7 @@ import com.javohirmx.notifyr.ui.settings.KeywordManagementScreen
 import com.javohirmx.notifyr.ui.settings.HelpScreen
 import com.javohirmx.notifyr.ui.settings.DataManagementScreen
 import com.javohirmx.notifyr.ui.onboarding.OnboardingScreen
+import com.javohirmx.notifyr.ui.settings.PrivacyPolicyScreen
 
 @Composable
 fun NotifyrNavigation(
@@ -55,6 +56,10 @@ fun NotifyrNavigation(
             )
         }
         
+        composable(Screen.PrivacyPolicy.route) {
+            PrivacyPolicyScreen(navController = navController)
+        }
+        
         composable(Screen.Onboarding.route) {
             OnboardingScreen(navController = navController)
         }
@@ -70,4 +75,5 @@ sealed class Screen(val route: String, val title: String) {
     object Help : Screen("help", "Help & Support")
     object DataManagement : Screen("data_management", "Data Management")
     object Onboarding : Screen("onboarding", "Welcome")
+    object PrivacyPolicy : Screen("privacy_policy", "Privacy Policy")
 }

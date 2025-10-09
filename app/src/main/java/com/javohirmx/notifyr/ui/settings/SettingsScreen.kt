@@ -279,7 +279,7 @@ fun SettingsScreen(
                 title = "Privacy Policy",
                 description = "Learn how we handle your data",
                 icon = Icons.Default.Lock,
-                onClick = { /* TODO: Show privacy policy */ }
+                onClick = { navController.navigate(Screen.PrivacyPolicy.route) }
             )
             
             Spacer(modifier = Modifier.height(8.dp))

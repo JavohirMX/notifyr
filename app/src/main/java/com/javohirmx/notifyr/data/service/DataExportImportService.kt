@@ -256,8 +256,8 @@ class DataExportImportService @Inject constructor(
     private fun getExportSettings(): ExportSettings {
         // TODO: Get actual settings from preferences repository when available
         return ExportSettings(
-            digestNotificationsEnabled = false,
-            digestIntervalHours = 4,
+            digestNotificationsEnabled = true,
+            digestIntervalHours = 6,
             dataRetentionDays = 30,
             isDeveloperModeEnabled = false
         )

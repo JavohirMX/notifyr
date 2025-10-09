@@ -5,6 +5,11 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
+import com.javohirmx.notifyr.data.repository.NotificationRepository
+import dagger.hilt.EntryPoints
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
 
 class NotificationActionReceiver : BroadcastReceiver() {
     
@@ -12,6 +17,12 @@ class NotificationActionReceiver : BroadcastReceiver() {
         private const val TAG = "NotificationActionReceiver"
     }
     
+    @dagger.hilt.EntryPoint
+    @dagger.hilt.InstallIn(SingletonComponent::class)
+    interface NotificationRepoEntryPoint {
+        fun notificationRepository(): NotificationRepository
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
         val notificationId = intent.getLongExtra(NotificationManager.EXTRA_NOTIFICATION_ID, -1L)
         
@@ -26,7 +37,17 @@ class NotificationActionReceiver : BroadcastReceiver() {
                 val notificationManager = NotificationManagerCompat.from(context)
                 notificationManager.cancel(NotificationManager.URGENT_NOTIFICATION_ID + notificationId.toInt())
                 
-                // TODO: Mark as read in database - this will be handled by a service call
+                // Mark as read in database synchronously
+                try {
+                    val appContext = context.applicationContext
+                    val entryPoint = EntryPoints.get(appContext, NotificationRepoEntryPoint::class.java)
+                    val repo = entryPoint.notificationRepository()
+                    kotlinx.coroutines.runBlocking {
+                        repo.markAsRead(notificationId, true)
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to mark as read: ${e.message}")
+                }
                 Log.d(TAG, "Marked notification $notificationId as read")
             }
             
