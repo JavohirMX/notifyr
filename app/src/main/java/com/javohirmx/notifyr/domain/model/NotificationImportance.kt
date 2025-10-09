@@ -1,5 +1,8 @@
 package com.javohirmx.notifyr.domain.model
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 enum class NotificationImportance(val value: Int) {
     IGNORE(0),
     NORMAL(1),

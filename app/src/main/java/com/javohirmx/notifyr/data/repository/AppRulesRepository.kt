@@ -122,4 +122,13 @@ class AppRulesRepository @Inject constructor() {
     fun resetToDefaults() {
         initializeDefaultRules()
     }
+    
+    fun exportAppRules(): List<AppRule> {
+        return _appRules.value.values.toList()
+    }
+    
+    fun importAppRules(appRules: List<AppRule>) {
+        val rulesMap = appRules.associateBy { it.packageName }
+        _appRules.value = rulesMap
+    }
 }

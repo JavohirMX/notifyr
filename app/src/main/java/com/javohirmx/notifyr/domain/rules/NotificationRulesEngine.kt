@@ -49,29 +49,36 @@ class NotificationRulesEngine @Inject constructor(
     }
     
     private fun evaluateNotificationImportance(notification: NotificationData): NotificationImportance {
-        // Rule hierarchy as per guidelines:
+        // Rule hierarchy modified to allow keywords to override default app behavior:
         // 1. Contact rules (not implemented in simple version)
-        // 2. App rules
-        // 3. Keyword rules
-        // 4. Default handling
+        // 2. User-defined app rules (highest priority)
+        // 3. Keyword rules (can override default app behavior)
+        // 4. Default app rules
+        // 5. Default handling
         
-        // 2. App rules
-        val appImportance = evaluateAppRules(notification)
-        if (appImportance != null) {
-            return appImportance
+        // 2. User-defined app rules (highest priority)
+        val userAppImportance = evaluateUserAppRules(notification)
+        if (userAppImportance != null) {
+            return userAppImportance
         }
         
-        // 3. Keyword rules
+        // 3. Keyword rules (can override default app behavior)
         val keywordImportance = evaluateKeywordRules(notification)
         if (keywordImportance != null) {
             return keywordImportance
         }
         
-        // 4. Default handling
+        // 4. Default app rules
+        val defaultAppImportance = evaluateDefaultAppRules(notification)
+        if (defaultAppImportance != null) {
+            return defaultAppImportance
+        }
+        
+        // 5. Default handling
         return evaluateDefaultRules(notification)
     }
     
-    private fun evaluateAppRules(notification: NotificationData): NotificationImportance? {
+    private fun evaluateUserAppRules(notification: NotificationData): NotificationImportance? {
         val packageName = notification.packageName
         
         // Check for user-defined app rules first
@@ -84,7 +91,12 @@ class NotificationRulesEngine @Inject constructor(
             }
         }
         
-        // Fallback to default rules for apps not configured by user
+        return null // No user-defined rule found
+    }
+    
+    private fun evaluateDefaultAppRules(notification: NotificationData): NotificationImportance? {
+        val packageName = notification.packageName
+        
         // Banking apps are always urgent
         if (defaultBankingApps.contains(packageName)) {
             return NotificationImportance.URGENT
@@ -100,7 +112,7 @@ class NotificationRulesEngine @Inject constructor(
             return null // Continue to keyword evaluation
         }
         
-        return null // No specific app rule found
+        return null // No default app rule found
     }
     
     private fun evaluateKeywordRules(notification: NotificationData): NotificationImportance? {
@@ -109,27 +121,31 @@ class NotificationRulesEngine @Inject constructor(
         // Check user-defined keyword rules first
         val keywordRules = keywordRulesRepository.keywordRules.value
         
-        for (keywordRule in keywordRules) {
-            if (!keywordRule.isEnabled) continue
-            
-            val matches = if (keywordRule.isRegex) {
-                try {
-                    val regex = Regex(keywordRule.keyword, RegexOption.IGNORE_CASE)
-                    regex.containsMatchIn(content)
-                } catch (e: Exception) {
-                    // Invalid regex, fall back to simple contains
+        // If there are user-defined rules, only use those (don't fall back to defaults)
+        if (keywordRules.isNotEmpty()) {
+            for (keywordRule in keywordRules) {
+                if (!keywordRule.isEnabled) continue
+                
+                val matches = if (keywordRule.isRegex) {
+                    try {
+                        val regex = Regex(keywordRule.keyword, RegexOption.IGNORE_CASE)
+                        regex.containsMatchIn(content)
+                    } catch (e: Exception) {
+                        // Invalid regex, fall back to simple contains
+                        content.contains(keywordRule.keyword.lowercase())
+                    }
+                } else {
                     content.contains(keywordRule.keyword.lowercase())
                 }
-            } else {
-                content.contains(keywordRule.keyword.lowercase())
+                
+                if (matches) {
+                    return keywordRule.importance
+                }
             }
-            
-            if (matches) {
-                return keywordRule.importance
-            }
+            return null // No user rule matched
         }
         
-        // Fallback to default urgent keywords if no user rules match
+        // Fallback to default urgent keywords only if no user rules are defined
         for (keyword in defaultUrgentKeywords) {
             if (content.contains(keyword.lowercase())) {
                 return NotificationImportance.URGENT

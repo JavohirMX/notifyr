@@ -53,6 +53,40 @@ class NotificationRepository(
     suspend fun updateNotification(notification: NotificationData) {
         notificationDao.updateNotification(notification.toEntity())
     }
+
+    suspend fun findRecentDuplicate(
+        packageName: String,
+        title: String,
+        text: String,
+        since: Long
+    ): NotificationData? {
+        val entity = notificationDao.findRecentDuplicate(packageName, title, text, since)
+        return entity?.toDomain()
+    }
+
+    suspend fun updateTimestamp(id: Long, timestamp: Long) {
+        notificationDao.updateTimestamp(id, timestamp)
+    }
+
+    suspend fun upsertWithDedup(notification: NotificationData, windowMs: Long): Long {
+        if (windowMs <= 0L) {
+            return insertNotification(notification)
+        }
+        val cutoff = System.currentTimeMillis() - windowMs
+        val dup = findRecentDuplicate(
+            packageName = notification.packageName,
+            title = notification.title,
+            text = notification.text,
+            since = cutoff
+        )
+        return if (dup != null) {
+            // Refresh timestamp to keep it recent
+            updateTimestamp(dup.id, notification.timestamp)
+            dup.id
+        } else {
+            insertNotification(notification)
+        }
+    }
     
     suspend fun markAsRead(id: Long, isRead: Boolean = true) {
         notificationDao.markAsRead(id, isRead)
@@ -84,5 +118,13 @@ class NotificationRepository(
     
     suspend fun getUnreadNotificationCount(): Int {
         return notificationDao.getUnreadNotificationCount()
+    }
+    
+    suspend fun exportNotifications(): List<NotificationData> {
+        return notificationDao.getAllNotificationsSync().map { it.toDomain() }
+    }
+    
+    suspend fun importNotifications(notifications: List<NotificationData>) {
+        notificationDao.insertNotifications(notifications.map { it.toEntity() })
     }
 }

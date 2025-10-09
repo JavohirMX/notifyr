@@ -1,6 +1,8 @@
 package com.javohirmx.notifyr.ui.history
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -13,6 +15,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
+import android.content.Intent
+import android.content.pm.PackageManager
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -210,6 +221,29 @@ fun NotificationHistoryCard(
     onMarkAsRead: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val context = LocalContext.current
+    val packageManager = context.packageManager
+    val appIconPainter = remember(notification.packageName) {
+        try {
+            val drawable = packageManager.getApplicationIcon(notification.packageName)
+            val bitmap = drawable.toBitmap(width = 64, height = 64, config = android.graphics.Bitmap.Config.ARGB_8888)
+            BitmapPainter(bitmap.asImageBitmap())
+        } catch (e: Exception) {
+            val fallback = androidx.core.content.ContextCompat.getDrawable(context, android.R.drawable.sym_def_app_icon)
+            val bitmap = fallback?.toBitmap(width = 64, height = 64, config = android.graphics.Bitmap.Config.ARGB_8888)
+            if (bitmap != null) BitmapPainter(bitmap.asImageBitmap()) else null
+        }
+    }
+    val onOpenApp = remember(notification.packageName) {
+        {
+            try {
+                val launchIntent: Intent? = packageManager.getLaunchIntentForPackage(notification.packageName)
+                if (launchIntent != null) {
+                    context.startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+            } catch (_: Exception) { }
+        }
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = if (notification.isRead) {
@@ -223,6 +257,7 @@ fun NotificationHistoryCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .clickable(onClick = onOpenApp)
                 .padding(16.dp)
         ) {
             // Header with app name and timestamp
@@ -234,6 +269,14 @@ fun NotificationHistoryCard(
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (appIconPainter != null) {
+                        Image(
+                        painter = appIconPainter,
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
                     Text(
                         text = notification.appName,
                         style = MaterialTheme.typography.labelMedium,

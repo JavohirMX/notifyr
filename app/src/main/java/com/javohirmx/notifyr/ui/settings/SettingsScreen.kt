@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.List
@@ -119,6 +120,15 @@ fun SettingsScreen(
                 description = "${uiState.totalNotifications} notifications stored",
                 icon = Icons.Default.List,
                 onClick = { /* TODO: Navigate to history management */ }
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            SettingCard(
+                title = "Export & Import",
+                description = "Backup and restore your settings and data",
+                icon = Icons.Default.Share,
+                onClick = { navController.navigate(Screen.DataManagement.route) }
             )
             
             Spacer(modifier = Modifier.height(8.dp))

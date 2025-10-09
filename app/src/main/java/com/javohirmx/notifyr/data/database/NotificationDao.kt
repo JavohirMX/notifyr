@@ -9,6 +9,9 @@ interface NotificationDao {
     @Query("SELECT * FROM notifications ORDER BY timestamp DESC")
     fun getAllNotifications(): Flow<List<NotificationEntity>>
     
+    @Query("SELECT * FROM notifications ORDER BY timestamp DESC")
+    suspend fun getAllNotificationsSync(): List<NotificationEntity>
+    
     @Query("SELECT * FROM notifications WHERE importance = :importance ORDER BY timestamp DESC")
     fun getNotificationsByImportance(importance: Int): Flow<List<NotificationEntity>>
     
@@ -53,4 +56,10 @@ interface NotificationDao {
     
     @Query("SELECT COUNT(*) FROM notifications WHERE isRead = 0")
     suspend fun getUnreadNotificationCount(): Int
+
+    @Query("SELECT * FROM notifications WHERE packageName = :packageName AND title = :title AND text = :text AND timestamp > :since ORDER BY timestamp DESC LIMIT 1")
+    suspend fun findRecentDuplicate(packageName: String, title: String, text: String, since: Long): NotificationEntity?
+
+    @Query("UPDATE notifications SET timestamp = :timestamp WHERE id = :id")
+    suspend fun updateTimestamp(id: Long, timestamp: Long)
 }

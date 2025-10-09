@@ -1,5 +1,8 @@
 package com.javohirmx.notifyr.domain.model
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class NotificationData(
     val id: Long = 0,
     val packageName: String,

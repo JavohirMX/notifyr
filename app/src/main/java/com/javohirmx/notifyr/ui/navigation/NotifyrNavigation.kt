@@ -11,6 +11,7 @@ import com.javohirmx.notifyr.ui.settings.SettingsScreen
 import com.javohirmx.notifyr.ui.settings.AppRulesScreen
 import com.javohirmx.notifyr.ui.settings.KeywordManagementScreen
 import com.javohirmx.notifyr.ui.settings.HelpScreen
+import com.javohirmx.notifyr.ui.settings.DataManagementScreen
 import com.javohirmx.notifyr.ui.onboarding.OnboardingScreen
 
 @Composable
@@ -48,6 +49,12 @@ fun NotifyrNavigation(
             HelpScreen(navController = navController)
         }
         
+        composable(Screen.DataManagement.route) {
+            DataManagementScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+        
         composable(Screen.Onboarding.route) {
             OnboardingScreen(navController = navController)
         }
@@ -61,5 +68,6 @@ sealed class Screen(val route: String, val title: String) {
     object AppRules : Screen("app_rules", "App Rules")
     object KeywordManagement : Screen("keyword_management", "Keyword Management")
     object Help : Screen("help", "Help & Support")
+    object DataManagement : Screen("data_management", "Data Management")
     object Onboarding : Screen("onboarding", "Welcome")
 }

@@ -61,6 +61,12 @@ class NotificationListenerService : NotificationListenerService() {
         if (packageName == this.packageName) {
             return
         }
+
+        // Filter out system-like notifications (Android System, System UI, core services)
+        if (isSystemLikePackage(packageName)) {
+            Log.d(TAG, "Filtered system package: $packageName")
+            return
+        }
         
         // Extract notification data
         val title = notification.extras.getCharSequence("android.title")?.toString() ?: ""
@@ -91,8 +97,17 @@ class NotificationListenerService : NotificationListenerService() {
         // Apply rules engine to classify importance
         val classifiedNotification = rulesEngine.classifyNotification(notificationData)
         
-        // Store in database
-        notificationRepository.insertNotification(classifiedNotification)
+        // Deduplication window: larger for ongoing events/media/calls
+        val isOngoing = (notification.flags and android.app.Notification.FLAG_ONGOING_EVENT) != 0
+        val isCall = category == android.app.Notification.CATEGORY_CALL || category == "call"
+        val isMedia = category == android.app.Notification.CATEGORY_TRANSPORT || category == "transport"
+        val dedupWindowMs = when {
+            isCall -> 15_000L
+            isOngoing || isMedia -> 60_000L
+            else -> 3_000L
+        }
+        // Store with deduplication
+        notificationRepository.upsertWithDedup(classifiedNotification, dedupWindowMs)
         
         // Handle urgent notifications
         if (classifiedNotification.importance == NotificationImportance.URGENT) {
@@ -116,5 +131,27 @@ class NotificationListenerService : NotificationListenerService() {
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
         Log.w(TAG, "Notification Listener Service disconnected")
+    }
+
+    private fun isSystemLikePackage(packageName: String): Boolean {
+        if (packageName == "android") return true
+        if (packageName.startsWith("com.android.systemui")) return true
+        if (packageName.startsWith("com.google.android.gms")) return true
+        if (packageName.startsWith("com.google.android")) return true
+        if (packageName.startsWith("com.samsung.android")) return true
+        if (packageName.startsWith("com.huawei.android")) return true
+        if (packageName.startsWith("com.miui.system")) return true
+        // Heuristic: system apps without launch intent
+        return try {
+            val pm = packageManager
+            val appInfo = pm.getApplicationInfo(packageName, 0)
+            val isSystem = (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0 ||
+                (appInfo.flags and android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+            val hasLauncher = pm.getLaunchIntentForPackage(packageName) != null
+            isSystem && !hasLauncher
+        } catch (e: Exception) {
+            // If we can't resolve info, be conservative and filter out
+            true
+        }
     }
 }
