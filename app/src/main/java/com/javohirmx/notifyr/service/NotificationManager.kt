@@ -1,17 +1,22 @@
 package com.javohirmx.notifyr.service
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.AudioAttributes
 import android.media.RingtoneManager
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.javohirmx.notifyr.MainActivity
 import com.javohirmx.notifyr.R
+import com.javohirmx.notifyr.domain.digest.NaturalLanguageDigestGenerator
 import com.javohirmx.notifyr.domain.model.EnhancedDigest
 import com.javohirmx.notifyr.domain.model.NotificationData
 import com.javohirmx.notifyr.domain.model.NotificationImportance
@@ -21,12 +26,15 @@ import javax.inject.Singleton
 
 @Singleton
 class NotificationManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val nlDigestGenerator: NaturalLanguageDigestGenerator
 ) {
     
     private val notificationManager = NotificationManagerCompat.from(context)
     
     companion object {
+        private const val TAG = "NotificationManager"
+        
         const val URGENT_CHANNEL_ID = "urgent_notifications"
         const val NORMAL_CHANNEL_ID = "normal_notifications"
         const val DIGEST_CHANNEL_ID = "digest_notifications"
@@ -43,6 +51,21 @@ class NotificationManager @Inject constructor(
     
     init {
         createNotificationChannels()
+    }
+    
+    /**
+     * Check if we have permission to post notifications
+     */
+    private fun canPostNotifications(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            // Pre-Android 13, notifications are enabled by default
+            notificationManager.areNotificationsEnabled()
+        }
     }
     
     private fun createNotificationChannels() {
@@ -102,6 +125,11 @@ class NotificationManager @Inject constructor(
     }
     
     fun showUrgentNotification(notification: NotificationData) {
+        if (!canPostNotifications()) {
+            Log.w(TAG, "Cannot post notifications - permission not granted")
+            return
+        }
+        
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
@@ -193,6 +221,11 @@ class NotificationManager @Inject constructor(
     fun showDigestNotification(normalNotifications: List<NotificationData>) {
         if (normalNotifications.isEmpty()) return
         
+        if (!canPostNotifications()) {
+            Log.w(TAG, "Cannot post digest notification - permission not granted")
+            return
+        }
+        
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             putExtra("open_tab", "history")
@@ -240,6 +273,11 @@ class NotificationManager @Inject constructor(
     fun showEnhancedDigestNotification(digest: EnhancedDigest) {
         if (digest.totalCount == 0) return
         
+        if (!canPostNotifications()) {
+            Log.w(TAG, "Cannot post enhanced digest notification - permission not granted")
+            return
+        }
+        
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             putExtra("open_tab", "digest")
@@ -251,9 +289,18 @@ class NotificationManager @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         
+        // Generate natural language summary
+        val nlSummary = nlDigestGenerator.generateNaturalLanguageSummary(digest)
+        val shortSummary = nlDigestGenerator.generateShortSummary(digest)
+        
+        val bigTextStyle = NotificationCompat.BigTextStyle()
+            .setBigContentTitle("📬 Notification Digest")
+            .bigText(nlSummary)
+            .setSummaryText(shortSummary)
+        
         val inboxStyle = NotificationCompat.InboxStyle()
             .setBigContentTitle("📬 ${digest.timeRange}")
-            .setSummaryText(digest.summary.summaryText)
+            .setSummaryText(shortSummary)
         
         // Show priority items first
         if (digest.needsAttention.isNotEmpty()) {
@@ -287,8 +334,8 @@ class NotificationManager @Inject constructor(
         val notificationBuilder = NotificationCompat.Builder(context, DIGEST_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_normal)
             .setContentTitle("Notification Digest")
-            .setContentText(digest.summary.summaryText)
-            .setStyle(inboxStyle)
+            .setContentText(shortSummary)
+            .setStyle(bigTextStyle)  // Use natural language style
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setAutoCancel(true)

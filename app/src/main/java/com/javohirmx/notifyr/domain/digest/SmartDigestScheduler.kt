@@ -1,9 +1,13 @@
 package com.javohirmx.notifyr.domain.digest
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.BroadcastReceiver
+import android.os.Build
+import android.util.Log
+import androidx.datastore.core.DataStore
+import com.javohirmx.notifyr.data.datastore.AppSettings
 import com.javohirmx.notifyr.data.repository.NotificationRepository
 import com.javohirmx.notifyr.domain.focus.FocusModeManager
 import com.javohirmx.notifyr.domain.model.*
@@ -17,6 +21,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -28,20 +34,54 @@ class SmartDigestScheduler @Inject constructor(
     private val notificationRepository: NotificationRepository,
     private val digestGenerator: DigestGenerator,
     private val focusModeManager: FocusModeManager,
-    private val customNotificationManager: CustomNotificationManager
+    private val customNotificationManager: CustomNotificationManager,
+    private val dataStore: DataStore<AppSettings>
 ) {
+    companion object {
+        private const val TAG = "SmartDigestScheduler"
+    }
     
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     
     private var lastDigestTime = 0L
     private var lastUnlockTime = 0L
     private var phoneWasLocked = true
+    private var isReceiverRegistered = false
     
     private val _digestSettings = MutableStateFlow(DigestSettings())
     val digestSettings: StateFlow<DigestSettings> = _digestSettings.asStateFlow()
     
     private val _currentDigest = MutableStateFlow<EnhancedDigest?>(null)
     val currentDigest: StateFlow<EnhancedDigest?> = _currentDigest.asStateFlow()
+    
+    init {
+        scope.launch {
+            loadDigestSettings()
+        }
+    }
+    
+    private suspend fun loadDigestSettings() {
+        try {
+            val settings = dataStore.data.first()
+            if (settings.digestSettingsJson.isNotEmpty() && settings.digestSettingsJson != "{}") {
+                val digestSettings = Json.decodeFromString<DigestSettings>(settings.digestSettingsJson)
+                _digestSettings.value = digestSettings
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load digest settings", e)
+        }
+    }
+    
+    private suspend fun saveDigestSettings() {
+        try {
+            dataStore.updateData { currentSettings ->
+                val settingsJson = Json.encodeToString(_digestSettings.value)
+                currentSettings.copy(digestSettingsJson = settingsJson)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save digest settings", e)
+        }
+    }
     
     private val unlockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -57,19 +97,44 @@ class SmartDigestScheduler @Inject constructor(
     }
     
     fun initialize() {
-        // Register unlock listener
-        val filter = IntentFilter().apply {
-            addAction(Intent.ACTION_USER_PRESENT)
-            addAction(Intent.ACTION_SCREEN_OFF)
+        if (isReceiverRegistered) {
+            Log.d(TAG, "Receiver already registered")
+            return
         }
-        context.registerReceiver(unlockReceiver, filter)
+        
+        try {
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_USER_PRESENT)
+                addAction(Intent.ACTION_SCREEN_OFF)
+            }
+            
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.registerReceiver(unlockReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+            } else {
+                context.registerReceiver(unlockReceiver, filter)
+            }
+            
+            isReceiverRegistered = true
+            Log.d(TAG, "Unlock receiver registered")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to register receiver", e)
+        }
     }
     
     fun shutdown() {
+        if (!isReceiverRegistered) {
+            return
+        }
+        
         try {
             context.unregisterReceiver(unlockReceiver)
-        } catch (e: Exception) {
+            isReceiverRegistered = false
+            Log.d(TAG, "Unlock receiver unregistered")
+        } catch (e: IllegalArgumentException) {
             // Already unregistered
+            Log.w(TAG, "Receiver was not registered")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error unregistering receiver", e)
         }
     }
     
@@ -116,11 +181,12 @@ class SmartDigestScheduler @Inject constructor(
         // Check if we should show digest based on mode
         val shouldShow = when (settings.mode) {
             DigestMode.CONTEXT_AWARE -> {
-                // Show on unlock after delay, with minimum notifications
-                val unlockDelay = TimeUnit.MINUTES.toMillis(settings.unlockDelayMinutes.toLong())
+                // Show on unlock after user has been inactive for specified delay
                 val timeSinceUnlock = now - lastUnlockTime
+                val unlockDelayMs = TimeUnit.MINUTES.toMillis(settings.unlockDelayMinutes.toLong())
+                val unlockWindow = TimeUnit.MINUTES.toMillis(2) // 2 minute window after delay
                 
-                timeSinceUnlock < TimeUnit.MINUTES.toMillis(2) && // Just unlocked
+                timeSinceUnlock in unlockDelayMs..(unlockDelayMs + unlockWindow) &&
                 phoneWasLocked &&
                 pendingCount >= settings.minNotificationThreshold &&
                 timeSinceLastDigest > TimeUnit.HOURS.toMillis(1) // At least 1 hour since last
@@ -215,6 +281,10 @@ class SmartDigestScheduler @Inject constructor(
     
     fun updateDigestSettings(settings: DigestSettings) {
         _digestSettings.value = settings
+        
+        scope.launch {
+            saveDigestSettings()
+        }
     }
 }
 

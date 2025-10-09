@@ -18,6 +18,7 @@ import com.javohirmx.notifyr.ui.settings.ContactsScreen
 import com.javohirmx.notifyr.ui.settings.FocusModeScreen
 import com.javohirmx.notifyr.ui.settings.DigestSettingsScreen
 import com.javohirmx.notifyr.ui.digest.DigestViewScreen
+import com.javohirmx.notifyr.ui.insights.InsightsScreen
 
 @Composable
 fun NotifyrNavigation(
@@ -83,6 +84,10 @@ fun NotifyrNavigation(
         composable(Screen.DigestView.route) {
             DigestViewScreen(navController = navController)
         }
+        
+        composable(Screen.Insights.route) {
+            InsightsScreen(navController = navController)
+        }
     }
 }
 
@@ -100,4 +105,5 @@ sealed class Screen(val route: String, val title: String) {
     object FocusMode : Screen("focus_mode", "Focus Modes")
     object DigestSettings : Screen("digest_settings", "Digest Settings")
     object DigestView : Screen("digest_view", "View Digest")
+    object Insights : Screen("insights", "Insights")
 }

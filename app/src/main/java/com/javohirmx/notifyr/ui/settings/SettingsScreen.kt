@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Analytics
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
@@ -116,6 +117,15 @@ fun SettingsScreen(
         
         // Smart Features Section
         SettingsSection(title = "Smart Features") {
+            SettingCard(
+                title = "Notification Insights",
+                description = "View your notification patterns and statistics",
+                icon = Icons.Default.Analytics,
+                onClick = { navController.navigate(Screen.Insights.route) }
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
             SettingCard(
                 title = "Focus Modes",
                 description = "Control notifications based on your context",

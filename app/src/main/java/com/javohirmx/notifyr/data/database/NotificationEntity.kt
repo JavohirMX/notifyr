@@ -1,13 +1,24 @@
 package com.javohirmx.notifyr.data.database
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import com.javohirmx.notifyr.domain.model.*
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.decodeFromString
 
-@Entity(tableName = "notifications")
+@Entity(
+    tableName = "notifications",
+    indices = [
+        Index(value = ["packageName"]),
+        Index(value = ["timestamp"]),
+        Index(value = ["importance"]),
+        Index(value = ["isRead"]),
+        Index(value = ["conversationId"]),
+        Index(value = ["packageName", "timestamp"])
+    ]
+)
 data class NotificationEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,

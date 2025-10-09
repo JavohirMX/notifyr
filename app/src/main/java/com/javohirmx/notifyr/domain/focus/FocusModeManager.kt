@@ -1,21 +1,64 @@
 package com.javohirmx.notifyr.domain.focus
 
+import androidx.datastore.core.DataStore
+import com.javohirmx.notifyr.data.datastore.AppSettings
 import com.javohirmx.notifyr.domain.model.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.util.Calendar
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class FocusModeManager @Inject constructor() {
+class FocusModeManager @Inject constructor(
+    private val dataStore: DataStore<AppSettings>
+) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     private val _focusSettings = MutableStateFlow(FocusSettings())
     val focusSettings: StateFlow<FocusSettings> = _focusSettings.asStateFlow()
     
     private val _currentMode = MutableStateFlow(FocusMode.NORMAL)
     val currentMode: StateFlow<FocusMode> = _currentMode.asStateFlow()
+    
+    init {
+        scope.launch {
+            loadFocusSettings()
+        }
+    }
+    
+    private suspend fun loadFocusSettings() {
+        try {
+            val settings = dataStore.data.first()
+            if (settings.focusModeSettingsJson.isNotEmpty() && settings.focusModeSettingsJson != "{}") {
+                val focusSettings = Json.decodeFromString<FocusSettings>(settings.focusModeSettingsJson)
+                _focusSettings.value = focusSettings
+                _currentMode.value = getCurrentMode()
+            }
+        } catch (e: Exception) {
+            // Use defaults on error
+            android.util.Log.e("FocusModeManager", "Failed to load focus settings", e)
+        }
+    }
+    
+    private suspend fun saveFocusSettings() {
+        try {
+            dataStore.updateData { currentSettings ->
+                val settingsJson = Json.encodeToString(_focusSettings.value)
+                currentSettings.copy(focusModeSettingsJson = settingsJson)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("FocusModeManager", "Failed to save focus settings", e)
+        }
+    }
     
     /**
      * Determine current focus mode based on settings and context
@@ -103,6 +146,10 @@ class FocusModeManager @Inject constructor() {
             autoSwitch = false // Disable auto-switch when manually set
         )
         _currentMode.value = mode
+        
+        scope.launch {
+            saveFocusSettings()
+        }
     }
     
     /**
@@ -114,6 +161,10 @@ class FocusModeManager @Inject constructor() {
             getCurrentMode() // Recalculate current mode
         } else {
             _currentMode.value = settings.currentMode
+        }
+        
+        scope.launch {
+            saveFocusSettings()
         }
     }
     
@@ -137,6 +188,10 @@ class FocusModeManager @Inject constructor() {
     fun enableAutoSwitch() {
         _focusSettings.value = _focusSettings.value.copy(autoSwitch = true)
         getCurrentMode()
+        
+        scope.launch {
+            saveFocusSettings()
+        }
     }
     
     /**
@@ -144,6 +199,10 @@ class FocusModeManager @Inject constructor() {
      */
     fun disableAutoSwitch() {
         _focusSettings.value = _focusSettings.value.copy(autoSwitch = false)
+        
+        scope.launch {
+            saveFocusSettings()
+        }
     }
 }
 

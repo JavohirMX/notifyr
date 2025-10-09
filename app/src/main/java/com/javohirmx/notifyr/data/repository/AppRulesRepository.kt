@@ -1,21 +1,62 @@
 package com.javohirmx.notifyr.data.repository
 
+import androidx.datastore.core.DataStore
+import com.javohirmx.notifyr.data.datastore.AppSettings
 import com.javohirmx.notifyr.domain.model.AppRule
 import com.javohirmx.notifyr.domain.model.AppRuleType
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class AppRulesRepository @Inject constructor() {
+class AppRulesRepository @Inject constructor(
+    private val dataStore: DataStore<AppSettings>
+) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     private val _appRules = MutableStateFlow<Map<String, AppRule>>(emptyMap())
     val appRules: StateFlow<Map<String, AppRule>> = _appRules.asStateFlow()
     
     init {
-        initializeDefaultRules()
+        scope.launch {
+            loadAppRules()
+        }
+    }
+    
+    private suspend fun loadAppRules() {
+        try {
+            val settings = dataStore.data.first()
+            if (settings.appRulesJson.isNotEmpty() && settings.appRulesJson != "[]") {
+                val rules = Json.decodeFromString<List<AppRule>>(settings.appRulesJson)
+                _appRules.value = rules.associateBy { it.packageName }
+            } else {
+                initializeDefaultRules()
+            }
+        } catch (e: Exception) {
+            // On error, initialize with defaults
+            initializeDefaultRules()
+        }
+    }
+    
+    private suspend fun saveAppRules() {
+        try {
+            dataStore.updateData { currentSettings ->
+                val rulesJson = Json.encodeToString(_appRules.value.values.toList())
+                currentSettings.copy(appRulesJson = rulesJson)
+            }
+        } catch (e: Exception) {
+            // Log error but don't crash
+            android.util.Log.e("AppRulesRepository", "Failed to save app rules", e)
+        }
     }
     
     private fun initializeDefaultRules() {
@@ -107,20 +148,36 @@ class AppRulesRepository @Inject constructor() {
         }
         
         _appRules.value = currentRules
+        
+        // Persist changes
+        scope.launch {
+            saveAppRules()
+        }
     }
     
     fun removeAppRule(packageName: String) {
         val currentRules = _appRules.value.toMutableMap()
         currentRules.remove(packageName)
         _appRules.value = currentRules
+        
+        scope.launch {
+            saveAppRules()
+        }
     }
     
     fun clearAllRules() {
         _appRules.value = emptyMap()
+        
+        scope.launch {
+            saveAppRules()
+        }
     }
     
     fun resetToDefaults() {
-        initializeDefaultRules()
+        scope.launch {
+            initializeDefaultRules()
+            saveAppRules()
+        }
     }
     
     fun exportAppRules(): List<AppRule> {
@@ -130,5 +187,9 @@ class AppRulesRepository @Inject constructor() {
     fun importAppRules(appRules: List<AppRule>) {
         val rulesMap = appRules.associateBy { it.packageName }
         _appRules.value = rulesMap
+        
+        scope.launch {
+            saveAppRules()
+        }
     }
 }

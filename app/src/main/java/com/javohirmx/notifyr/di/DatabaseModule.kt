@@ -23,7 +23,11 @@ object DatabaseModule {
             NotifyrDatabase::class.java,
             NotifyrDatabase.DATABASE_NAME
         )
-        .addMigrations(NotifyrDatabase.MIGRATION_1_2)
+        .addMigrations(
+            NotifyrDatabase.MIGRATION_1_2,
+            NotifyrDatabase.MIGRATION_2_3
+        )
+        .fallbackToDestructiveMigration() // For MVP, allow destructive migration if needed
         .build()
     }
     

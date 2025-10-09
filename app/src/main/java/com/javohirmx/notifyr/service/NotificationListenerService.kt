@@ -16,6 +16,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -40,7 +42,12 @@ class NotificationListenerService : NotificationListenerService() {
     @Inject
     lateinit var digestScheduler: SmartDigestScheduler
     
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val serviceJob = SupervisorJob()
+    private val serviceScope = CoroutineScope(serviceJob + Dispatchers.IO)
+    
+    // For preventing race conditions
+    private val processingKeys = mutableSetOf<String>()
+    private val processingMutex = Mutex()
     
     companion object {
         private const val TAG = "NotificationListener"
@@ -55,6 +62,10 @@ class NotificationListenerService : NotificationListenerService() {
     override fun onDestroy() {
         super.onDestroy()
         digestScheduler.shutdown()
+        serviceJob.cancel() // Cancel all coroutines
+        
+        // Clear processing keys
+        processingKeys.clear()
     }
     
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -62,10 +73,26 @@ class NotificationListenerService : NotificationListenerService() {
         
         sbn?.let { statusBarNotification ->
             serviceScope.launch {
+                val key = statusBarNotification.key
+                
+                // Prevent race conditions by checking if already processing
+                processingMutex.withLock {
+                    if (processingKeys.contains(key)) {
+                        Log.d(TAG, "Already processing notification: $key")
+                        return@launch
+                    }
+                    processingKeys.add(key)
+                }
+                
                 try {
                     processNotification(statusBarNotification)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error processing notification", e)
+                } finally {
+                    // Remove from processing set
+                    processingMutex.withLock {
+                        processingKeys.remove(key)
+                    }
                 }
             }
         }
@@ -203,14 +230,43 @@ class NotificationListenerService : NotificationListenerService() {
     }
 
     private fun isSystemLikePackage(packageName: String): Boolean {
-        if (packageName == "android") return true
-        if (packageName.startsWith("com.android.systemui")) return true
-        if (packageName.startsWith("com.google.android.gms")) return true
-        if (packageName.startsWith("com.google.android")) return true
-        if (packageName.startsWith("com.samsung.android")) return true
-        if (packageName.startsWith("com.huawei.android")) return true
-        if (packageName.startsWith("com.miui.system")) return true
-        // Heuristic: system apps without launch intent
+        // List of system packages to explicitly block
+        val blockedSystemPackages = setOf(
+            "android",
+            "com.android.systemui",
+            "com.android.providers.calendar",
+            "com.android.providers.contacts",
+            "com.android.providers.downloads",
+            "com.android.providers.media",
+            "com.google.android.gms",
+            "com.google.android.gsf",
+            "com.samsung.android.incallui",
+            "com.samsung.android.contacts",
+            "com.miui.system.miwallpaper",
+            "com.huawei.android.internal.app"
+        )
+        
+        // Check if package is in blocked list
+        if (blockedSystemPackages.any { packageName.startsWith(it) }) {
+            return true
+        }
+        
+        // Allow important Google apps explicitly
+        val allowedGoogleApps = setOf(
+            "com.google.android.apps.messaging",
+            "com.google.android.apps.gmail",
+            "com.google.android.gm",
+            "com.google.android.calendar",
+            "com.google.android.apps.maps",
+            "com.google.android.dialer",
+            "com.google.android.apps.photos"
+        )
+        
+        if (allowedGoogleApps.contains(packageName)) {
+            return false
+        }
+        
+        // Heuristic: system apps without launch intent are likely background services
         return try {
             val pm = packageManager
             val appInfo = pm.getApplicationInfo(packageName, 0)
@@ -220,6 +276,7 @@ class NotificationListenerService : NotificationListenerService() {
             isSystem && !hasLauncher
         } catch (e: Exception) {
             // If we can't resolve info, be conservative and filter out
+            Log.w(TAG, "Could not determine system status for $packageName", e)
             true
         }
     }
