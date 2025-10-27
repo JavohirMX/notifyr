@@ -6,6 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.javohirmx.notifyr.data.repository.NotificationRepository
 import com.javohirmx.notifyr.domain.model.NotificationData
 import com.javohirmx.notifyr.domain.model.NotificationImportance
+import com.javohirmx.notifyr.domain.model.NotificationItem
+import com.javohirmx.notifyr.domain.model.NotificationGroup
+import com.javohirmx.notifyr.domain.usecase.GroupNotificationsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -14,7 +17,8 @@ import javax.inject.Inject
 @HiltViewModel
 class HistoryViewModel @Inject constructor(
     application: Application,
-    private val notificationRepository: NotificationRepository
+    private val notificationRepository: NotificationRepository,
+    private val groupNotificationsUseCase: GroupNotificationsUseCase
 ) : AndroidViewModel(application) {
     
     private val _uiState = MutableStateFlow(HistoryUiState())
@@ -51,10 +55,15 @@ class HistoryViewModel @Inject constructor(
                     it.appName.contains(query, ignoreCase = true)
                 }
                 
+                // Apply grouping to filtered notifications
+                val groupedUrgent = groupNotificationsUseCase.execute(filteredUrgent)
+                val groupedNormal = groupNotificationsUseCase.execute(filteredNormal)
+                val groupedIgnored = groupNotificationsUseCase.execute(filteredIgnored)
+                
                 _uiState.value = _uiState.value.copy(
-                    urgentNotifications = filteredUrgent,
-                    normalNotifications = filteredNormal,
-                    ignoredNotifications = filteredIgnored,
+                    urgentNotifications = groupedUrgent,
+                    normalNotifications = groupedNormal,
+                    ignoredNotifications = groupedIgnored,
                     isLoading = false
                 )
             }.collect()
@@ -83,6 +92,22 @@ class HistoryViewModel @Inject constructor(
         }
     }
     
+    fun markGroupAsRead(group: NotificationGroup) {
+        viewModelScope.launch {
+            group.notifications.forEach { notification ->
+                notificationRepository.markAsRead(notification.id, true)
+            }
+        }
+    }
+    
+    fun deleteGroup(group: NotificationGroup) {
+        viewModelScope.launch {
+            group.notifications.forEach { notification ->
+                notificationRepository.deleteNotification(notification)
+            }
+        }
+    }
+    
     fun refreshData() {
         _uiState.value = _uiState.value.copy(isLoading = true)
         loadNotifications()
@@ -90,9 +115,9 @@ class HistoryViewModel @Inject constructor(
 }
 
 data class HistoryUiState(
-    val urgentNotifications: List<NotificationData> = emptyList(),
-    val normalNotifications: List<NotificationData> = emptyList(),
-    val ignoredNotifications: List<NotificationData> = emptyList(),
+    val urgentNotifications: List<NotificationItem> = emptyList(),
+    val normalNotifications: List<NotificationItem> = emptyList(),
+    val ignoredNotifications: List<NotificationItem> = emptyList(),
     val isLoading: Boolean = true,
     val selectedTab: Int = 0
 )

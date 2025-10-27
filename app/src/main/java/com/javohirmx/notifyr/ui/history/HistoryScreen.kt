@@ -12,6 +12,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -36,6 +38,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.javohirmx.notifyr.domain.model.NotificationData
 import com.javohirmx.notifyr.domain.model.NotificationImportance
+import com.javohirmx.notifyr.domain.model.NotificationItem
+import com.javohirmx.notifyr.domain.model.NotificationGroup
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
@@ -137,7 +141,9 @@ fun HistoryScreen(
                         onMarkAsRead = viewModel::markAsRead,
                         onDelete = viewModel::deleteNotification,
                         onMarkAllAsRead = { viewModel.markAllAsRead(NotificationImportance.URGENT) },
-                        isLoading = uiState.isLoading
+                        isLoading = uiState.isLoading,
+                        onMarkGroupAsRead = viewModel::markGroupAsRead,
+                        onDeleteGroup = viewModel::deleteGroup
                     )
                     1 -> NotificationList(
                         notifications = uiState.normalNotifications,
@@ -145,7 +151,9 @@ fun HistoryScreen(
                         onMarkAsRead = viewModel::markAsRead,
                         onDelete = viewModel::deleteNotification,
                         onMarkAllAsRead = { viewModel.markAllAsRead(NotificationImportance.NORMAL) },
-                        isLoading = uiState.isLoading
+                        isLoading = uiState.isLoading,
+                        onMarkGroupAsRead = viewModel::markGroupAsRead,
+                        onDeleteGroup = viewModel::deleteGroup
                     )
                     2 -> NotificationList(
                         notifications = uiState.ignoredNotifications,
@@ -153,7 +161,9 @@ fun HistoryScreen(
                         onMarkAsRead = viewModel::markAsRead,
                         onDelete = viewModel::deleteNotification,
                         onMarkAllAsRead = { viewModel.markAllAsRead(NotificationImportance.IGNORE) },
-                        isLoading = uiState.isLoading
+                        isLoading = uiState.isLoading,
+                        onMarkGroupAsRead = viewModel::markGroupAsRead,
+                        onDeleteGroup = viewModel::deleteGroup
                     )
                 }
             }
@@ -213,12 +223,14 @@ fun SearchBar(
 
 @Composable
 fun NotificationList(
-    notifications: List<NotificationData>,
+    notifications: List<NotificationItem>,
     importance: NotificationImportance,
     onMarkAsRead: (NotificationData) -> Unit,
     onDelete: (NotificationData) -> Unit,
     onMarkAllAsRead: () -> Unit,
-    isLoading: Boolean
+    isLoading: Boolean,
+    onMarkGroupAsRead: (NotificationGroup) -> Unit = {},
+    onDeleteGroup: (NotificationGroup) -> Unit = {}
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         if (isLoading) {
@@ -297,7 +309,12 @@ fun NotificationList(
                             fontWeight = FontWeight.Medium
                         )
                         
-                        val unreadCount = notifications.count { !it.isRead }
+                        val unreadCount = notifications.sumOf { item ->
+                            when (item) {
+                                is NotificationItem.Single -> if (item.notification.isRead) 0 else 1
+                                is NotificationItem.Group -> item.group.unreadCount
+                            }
+                        }
                         if (unreadCount > 0) {
                             FilledTonalButton(
                                 onClick = onMarkAllAsRead,
@@ -323,14 +340,363 @@ fun NotificationList(
                 ) {
                     items(
                         items = notifications,
-                        key = { it.id }
-                    ) { notification ->
-                        NotificationHistoryCard(
-                            notification = notification,
-                            onMarkAsRead = { onMarkAsRead(notification) },
-                            onDelete = { onDelete(notification) }
+                        key = { item ->
+                            when (item) {
+                                is NotificationItem.Single -> "single_${item.notification.id}"
+                                is NotificationItem.Group -> "group_${item.group.packageName}_${item.group.firstTimestamp}"
+                            }
+                        }
+                    ) { item ->
+                        when (item) {
+                            is NotificationItem.Single -> {
+                                NotificationHistoryCard(
+                                    notification = item.notification,
+                                    onMarkAsRead = { onMarkAsRead(item.notification) },
+                                    onDelete = { onDelete(item.notification) }
+                                )
+                            }
+                            is NotificationItem.Group -> {
+                                NotificationGroupCard(
+                                    group = item.group,
+                                    onMarkAllAsRead = { onMarkGroupAsRead(item.group) },
+                                    onDeleteAll = { onDeleteGroup(item.group) },
+                                    onMarkSingleAsRead = onMarkAsRead,
+                                    onDeleteSingle = onDelete
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NotificationGroupCard(
+    group: NotificationGroup,
+    onMarkAllAsRead: () -> Unit,
+    onDeleteAll: () -> Unit,
+    onMarkSingleAsRead: (NotificationData) -> Unit,
+    onDeleteSingle: (NotificationData) -> Unit
+) {
+    val context = LocalContext.current
+    var isExpanded by remember { mutableStateOf(false) }
+    
+    val cardElevation by animateDpAsState(
+        targetValue = if (group.isAllRead) 0.dp else 3.dp,
+        label = "group_card_elevation"
+    )
+    
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        elevation = CardDefaults.elevatedCardElevation(
+            defaultElevation = cardElevation
+        ),
+        colors = if (group.isAllRead) {
+            CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            )
+        } else {
+            CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            )
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            // Group Header - Clickable to expand/collapse
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isExpanded = !isExpanded },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    // App Icon with unread indicator
+                    Box {
+                        com.javohirmx.notifyr.utils.AppIconUtils.AppIconOrPlaceholder(
+                            context = context,
+                            packageName = group.packageName,
+                            appName = group.appName,
+                            size = 40.dp,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                        )
+                        // Unread indicator
+                        if (!group.isAllRead) {
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .align(Alignment.TopEnd)
+                                    .offset(x = 2.dp, y = (-2).dp)
+                                    .background(
+                                        color = MaterialTheme.colorScheme.primary,
+                                        shape = CircleShape
+                                    )
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.width(12.dp))
+                    
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = group.appName,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            
+                            // Group count badge
+                            Badge(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer
+                            ) {
+                                Text(
+                                    text = "${group.count}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            
+                            // Unread count badge
+                            if (group.unreadCount > 0) {
+                                Badge(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer
+                                ) {
+                                    Text(
+                                        text = "${group.unreadCount} unread",
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            }
+                        }
+                        
+                        Text(
+                            text = formatTimestamp(group.lastTimestamp) + " - " + formatTimestamp(group.firstTimestamp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                }
+                
+                // Expand/Collapse Icon
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (isExpanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            
+            // Group Actions
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (!group.isAllRead) {
+                    TextButton(
+                        onClick = onMarkAllAsRead,
+                        contentPadding = PaddingValues(horizontal = 12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Mark all read")
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                }
+                
+                TextButton(
+                    onClick = onDeleteAll,
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Delete all")
+                }
+            }
+            
+            // Expanded Content - Individual Notifications
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(
+                    modifier = Modifier.padding(top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    HorizontalDivider()
+                    
+                    Text(
+                        text = "Individual Notifications",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                    
+                    group.notifications.forEach { notification ->
+                        GroupedNotificationItem(
+                            notification = notification,
+                            onMarkAsRead = { onMarkSingleAsRead(notification) },
+                            onDelete = { onDeleteSingle(notification) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GroupedNotificationItem(
+    notification: NotificationData,
+    onMarkAsRead: () -> Unit,
+    onDelete: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = if (notification.isRead) {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        shape = RoundedCornerShape(8.dp),
+        tonalElevation = if (notification.isRead) 0.dp else 1.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp)
+        ) {
+            // Timestamp and unread indicator
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (!notification.isRead) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(
+                                    color = MaterialTheme.colorScheme.primary,
+                                    shape = CircleShape
+                                )
+                        )
+                    }
+                    Text(
+                        text = formatTimestamp(notification.timestamp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (notification.isRead) FontWeight.Normal else FontWeight.SemiBold
+                    )
+                }
+            }
+            
+            // Title and Content
+            if (notification.title.isNotBlank() || notification.text.isNotBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                
+                if (notification.title.isNotBlank()) {
+                    Text(
+                        text = notification.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = if (notification.isRead) {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                
+                if (notification.text.isNotBlank()) {
+                    Text(
+                        text = notification.text,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (notification.isRead) {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            
+            // Individual actions
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                if (!notification.isRead) {
+                    TextButton(
+                        onClick = onMarkAsRead,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Read", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                
+                TextButton(
+                    onClick = onDelete,
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Delete", style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
