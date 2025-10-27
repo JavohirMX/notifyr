@@ -83,8 +83,9 @@ class NotificationRulesEngine @Inject constructor(
         
         // Check for user-defined app rules first
         val appRule = appRulesRepository.getAppRule(packageName)
-        if (appRule != null) {
+        if (appRule != null && appRule.isEnabled) {
             return when (appRule.ruleType) {
+                AppRuleType.DONT_INTERCEPT -> null // Should be handled earlier, but return null as fallback
                 AppRuleType.ALWAYS_URGENT -> NotificationImportance.URGENT
                 AppRuleType.ALWAYS_IGNORE -> NotificationImportance.IGNORE
                 AppRuleType.FILTER_KEYWORDS -> null // Continue to keyword evaluation

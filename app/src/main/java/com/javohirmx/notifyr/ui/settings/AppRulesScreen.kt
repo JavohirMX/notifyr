@@ -1,39 +1,30 @@
 package com.javohirmx.notifyr.ui.settings
 
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
+import androidx.compose.animation.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.javohirmx.notifyr.utils.AppIconUtils
-import androidx.navigation.NavController
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
 import com.javohirmx.notifyr.domain.model.AppRule
 import com.javohirmx.notifyr.domain.model.AppRuleType
-
-data class InstalledApp(
-    val packageName: String,
-    val appName: String,
-    val isSystemApp: Boolean,
-    val currentRule: AppRuleType?
-)
+import com.javohirmx.notifyr.domain.model.description
+import com.javohirmx.notifyr.domain.model.displayName
+import com.javohirmx.notifyr.ui.history.AppInfo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,117 +33,88 @@ fun AppRulesScreen(
     viewModel: AppRulesViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var showRuleDialog by remember { mutableStateOf(false) }
+    var selectedApp by remember { mutableStateOf<AppInfo?>(null) }
     var searchQuery by remember { mutableStateOf("") }
-    var showSystemApps by remember { mutableStateOf(false) }
     
-    LaunchedEffect(Unit) {
-        viewModel.loadInstalledApps()
-    }
-    
-    Column(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Top App Bar
-        TopAppBar(
-            title = { Text("App Rules") },
-            navigationIcon = {
-                IconButton(onClick = { navController.navigateUp() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            }
-        )
-        
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("App Rules") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.navigateUp() }) {
+                        Icon(Icons.Default.ArrowBack, "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
+            )
+        }
+    ) { paddingValues ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp)
+                .padding(paddingValues)
         ) {
-            // Search Bar
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Search apps...") },
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = "Search")
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Clear")
+            // Search bar
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 2.dp
+            ) {
+                TextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    placeholder = { Text("Search apps...") },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null)
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Clear, contentDescription = "Clear")
+                            }
                         }
-                    }
-                },
-                singleLine = true
-            )
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(28.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                        unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                        disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                    )
+                )
+            }
             
-            Spacer(modifier = Modifier.height(16.dp))
+            HorizontalDivider()
             
-            // Filter Options
+            // Filter by rule type
+            var showOnlyRuled by remember { mutableStateOf(false) }
+            
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "App Rules Configuration",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Medium
+                    text = "${uiState.apps.size} apps",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "System apps",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Switch(
-                        checked = showSystemApps,
-                        onCheckedChange = { showSystemApps = it }
-                    )
-                }
-            }
-            
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Legend
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                FilterChip(
+                    selected = showOnlyRuled,
+                    onClick = { showOnlyRuled = !showOnlyRuled },
+                    label = { Text("With rules only") }
                 )
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp)
-                ) {
-                    Text(
-                        text = "Rule Types:",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        LegendItem(
-                            color = MaterialTheme.colorScheme.error,
-                            text = "Always Urgent"
-                        )
-                        LegendItem(
-                            color = MaterialTheme.colorScheme.primary,
-                            text = "Filter Keywords"
-                        )
-                        LegendItem(
-                            color = MaterialTheme.colorScheme.outline,
-                            text = "Always Ignore"
-                        )
-                    }
-                }
             }
             
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            // Apps List
+            // Apps list
             if (uiState.isLoading) {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -161,21 +123,41 @@ fun AppRulesScreen(
                     CircularProgressIndicator()
                 }
             } else {
-                val filteredApps = uiState.installedApps.filter { app ->
-                    val matchesSearch = app.appName.contains(searchQuery, ignoreCase = true) ||
-                            app.packageName.contains(searchQuery, ignoreCase = true)
-                    val matchesSystemFilter = showSystemApps || !app.isSystemApp
-                    matchesSearch && matchesSystemFilter
+                val filteredApps = uiState.apps.filter { app ->
+                    val matchesSearch = searchQuery.isBlank() || 
+                        app.appName.contains(searchQuery, ignoreCase = true) ||
+                        app.packageName.contains(searchQuery, ignoreCase = true)
+                    
+                    val matchesFilter = !showOnlyRuled || uiState.rules[app.packageName] != null
+                    
+                    matchesSearch && matchesFilter
                 }
                 
                 LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(filteredApps) { app ->
+                    items(filteredApps, key = { it.packageName }) { app ->
                         AppRuleCard(
                             app = app,
-                            onRuleChanged = { newRule ->
-                                viewModel.updateAppRule(app.packageName, app.appName, newRule)
+                            rule = uiState.rules[app.packageName],
+                            onClick = {
+                                selectedApp = app
+                                showRuleDialog = true
+                            },
+                            onToggleRule = { enabled ->
+                                uiState.rules[app.packageName]?.let { rule ->
+                                    viewModel.updateAppRule(
+                                        app.packageName,
+                                        app.appName,
+                                        rule.ruleType,
+                                        enabled
+                                    )
+                                }
+                            },
+                            onRemoveRule = {
+                                viewModel.removeAppRule(app.packageName)
                             }
                         )
                     }
@@ -183,181 +165,300 @@ fun AppRulesScreen(
             }
         }
     }
-}
-
-@Composable
-fun LegendItem(
-    color: Color,
-    text: String
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .size(12.dp)
-                .padding(2.dp)
-        ) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = color),
-                modifier = Modifier.fillMaxSize()
-            ) {}
-        }
-        Spacer(modifier = Modifier.width(4.dp))
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall
+    
+    // Rule selection dialog
+    if (showRuleDialog && selectedApp != null) {
+        AppRuleDialog(
+            app = selectedApp!!,
+            currentRule = uiState.rules[selectedApp!!.packageName],
+            onDismiss = { showRuleDialog = false },
+            onSelectRule = { ruleType ->
+                viewModel.updateAppRule(
+                    selectedApp!!.packageName,
+                    selectedApp!!.appName,
+                    ruleType,
+                    true
+                )
+                showRuleDialog = false
+            },
+            onRemoveRule = {
+                viewModel.removeAppRule(selectedApp!!.packageName)
+                showRuleDialog = false
+            }
         )
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppRuleCard(
-    app: InstalledApp,
-    onRuleChanged: (AppRuleType?) -> Unit
+    app: AppInfo,
+    rule: AppRule?,
+    onClick: () -> Unit,
+    onToggleRule: (Boolean) -> Unit,
+    onRemoveRule: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = when (app.currentRule) {
-                AppRuleType.ALWAYS_URGENT -> MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
-                AppRuleType.FILTER_KEYWORDS -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                AppRuleType.ALWAYS_IGNORE -> MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)
-                null -> MaterialTheme.colorScheme.surface
-            }
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        elevation = CardDefaults.elevatedCardElevation(
+            defaultElevation = if (rule != null) 3.dp else 1.dp
         )
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                val context = LocalContext.current
-                val painter = AppIconUtils.rememberAppIconPainter(context, app.packageName, 24.dp)
-                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                    if (painter != null) {
-                        Image(painter = painter, contentDescription = null, modifier = Modifier.size(24.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
+                // App icon
+                com.javohirmx.notifyr.utils.AppIconUtils.AppIconOrPlaceholder(
+                    context = context,
+                    packageName = app.packageName,
+                    appName = app.appName,
+                    size = 48.dp,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                )
+                
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = app.appName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Medium
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    Text(
-                        text = app.packageName,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    if (app.isSystemApp) {
-                        Text(
-                            text = "System App",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    }
-                }
-                
-                // Current rule indicator
-                Box {
-                    IconButton(onClick = { expanded = true }) {
-                        Icon(
-                            imageVector = when (app.currentRule) {
-                                AppRuleType.ALWAYS_URGENT -> Icons.Default.Warning
-                                AppRuleType.FILTER_KEYWORDS -> Icons.Default.Search
-                                AppRuleType.ALWAYS_IGNORE -> Icons.Default.Close
-                                null -> Icons.Default.MoreVert
-                            },
-                            contentDescription = "Rule options",
-                            tint = when (app.currentRule) {
-                                AppRuleType.ALWAYS_URGENT -> MaterialTheme.colorScheme.error
-                                AppRuleType.FILTER_KEYWORDS -> MaterialTheme.colorScheme.primary
-                                AppRuleType.ALWAYS_IGNORE -> MaterialTheme.colorScheme.outline
-                                null -> MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                        )
-                    }
                     
-                    DropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Default (No Rule)") },
-                            onClick = {
-                                onRuleChanged(null)
-                                expanded = false
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.Clear, contentDescription = null)
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Always Urgent") },
-                            onClick = {
-                                onRuleChanged(AppRuleType.ALWAYS_URGENT)
-                                expanded = false
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.Warning,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error
+                    if (rule != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            AssistChip(
+                                onClick = onClick,
+                                label = {
+                                    Text(
+                                        text = rule.ruleType.displayName,
+                                        style = MaterialTheme.typography.labelSmall
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = when (rule.ruleType) {
+                                            AppRuleType.DONT_INTERCEPT -> Icons.Default.CheckCircle
+                                            AppRuleType.ALWAYS_URGENT -> Icons.Default.Warning
+                                            AppRuleType.FILTER_KEYWORDS -> Icons.Default.Settings
+                                            AppRuleType.ALWAYS_IGNORE -> Icons.Default.Close
+                                        },
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                },
+                                colors = AssistChipDefaults.assistChipColors(
+                                    containerColor = when (rule.ruleType) {
+                                        AppRuleType.DONT_INTERCEPT -> MaterialTheme.colorScheme.primaryContainer
+                                        AppRuleType.ALWAYS_URGENT -> MaterialTheme.colorScheme.errorContainer
+                                        AppRuleType.FILTER_KEYWORDS -> MaterialTheme.colorScheme.tertiaryContainer
+                                        AppRuleType.ALWAYS_IGNORE -> MaterialTheme.colorScheme.surfaceVariant
+                                    }
+                                ),
+                                modifier = Modifier.height(24.dp)
+                            )
+                            
+                            if (!rule.isEnabled) {
+                                Text(
+                                    text = "(Disabled)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Filter by Keywords") },
-                            onClick = {
-                                onRuleChanged(AppRuleType.FILTER_KEYWORDS)
-                                expanded = false
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.Search,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Always Ignore") },
-                            onClick = {
-                                onRuleChanged(AppRuleType.ALWAYS_IGNORE)
-                                expanded = false
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Default.Close,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.outline
-                                )
-                            }
+                        }
+                    } else {
+                        Text(
+                            text = "No rule set",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
             }
             
-            // Show current rule description
-            app.currentRule?.let { rule ->
-                Spacer(modifier = Modifier.height(8.dp))
+            // Actions
+            if (rule != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    IconButton(
+                        onClick = { onToggleRule(!rule.isEnabled) },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (rule.isEnabled) Icons.Default.Check else Icons.Default.Close,
+                            contentDescription = if (rule.isEnabled) "Disable" else "Enable",
+                            tint = if (rule.isEnabled) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+                    
+                    IconButton(
+                        onClick = onRemoveRule,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Remove rule",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+            } else {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Add rule",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AppRuleDialog(
+    app: AppInfo,
+    currentRule: AppRule?,
+    onDismiss: () -> Unit,
+    onSelectRule: (AppRuleType) -> Unit,
+    onRemoveRule: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text("Set Rule for ${app.appName}")
                 Text(
-                    text = when (rule) {
-                        AppRuleType.ALWAYS_URGENT -> "All notifications from this app will be marked as urgent"
-                        AppRuleType.FILTER_KEYWORDS -> "Notifications will be filtered based on keywords"
-                        AppRuleType.ALWAYS_IGNORE -> "All notifications from this app will be ignored"
-                    },
+                    text = app.packageName,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppRuleType.entries.forEach { ruleType ->
+                    RuleOptionCard(
+                        ruleType = ruleType,
+                        isSelected = currentRule?.ruleType == ruleType,
+                        onClick = { onSelectRule(ruleType) }
+                    )
+                }
+                
+                if (currentRule != null) {
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    
+                    OutlinedButton(
+                        onClick = onRemoveRule,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Remove Rule")
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun RuleOptionCard(
+    ruleType: AppRuleType,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = when (ruleType) {
+                            AppRuleType.DONT_INTERCEPT -> Icons.Default.CheckCircle
+                            AppRuleType.ALWAYS_URGENT -> Icons.Default.Warning
+                            AppRuleType.FILTER_KEYWORDS -> Icons.Default.Settings
+                            AppRuleType.ALWAYS_IGNORE -> Icons.Default.Close
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = if (isSelected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                    
+                    Text(
+                        text = ruleType.displayName,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                Text(
+                    text = ruleType.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+            }
+            
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
         }

@@ -30,6 +30,7 @@ class HistoryViewModelFilterTest {
     private lateinit var application: Application
     private lateinit var notificationRepository: NotificationRepository
     private lateinit var groupNotificationsUseCase: GroupNotificationsUseCase
+    private lateinit var appRulesRepository: com.javohirmx.notifyr.data.repository.AppRulesRepository
     private lateinit var viewModel: HistoryViewModel
     
     @Before
@@ -38,6 +39,7 @@ class HistoryViewModelFilterTest {
         
         application = mock()
         notificationRepository = mock()
+        appRulesRepository = mock()
         groupNotificationsUseCase = GroupNotificationsUseCase()
         
         // Setup default repository responses
@@ -51,7 +53,8 @@ class HistoryViewModelFilterTest {
         viewModel = HistoryViewModel(
             application,
             notificationRepository,
-            groupNotificationsUseCase
+            groupNotificationsUseCase,
+            appRulesRepository
         )
     }
     

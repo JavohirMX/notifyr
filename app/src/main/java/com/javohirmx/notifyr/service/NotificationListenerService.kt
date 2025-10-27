@@ -28,6 +28,9 @@ class NotificationListenerService : NotificationListenerService() {
     lateinit var notificationRepository: NotificationRepository
     
     @Inject
+    lateinit var appRulesRepository: com.javohirmx.notifyr.data.repository.AppRulesRepository
+    
+    @Inject
     lateinit var rulesEngine: NotificationRulesEngine
     
     @Inject
@@ -121,6 +124,36 @@ class NotificationListenerService : NotificationListenerService() {
         if (isSystemLikePackage(packageName)) {
             Log.d(TAG, "Filtered system package: $packageName")
             return
+        }
+        
+        // Check for DONT_INTERCEPT rule - let notification through unchanged
+        val appRule = appRulesRepository.getAppRule(packageName)
+        if (appRule?.ruleType == com.javohirmx.notifyr.domain.model.AppRuleType.DONT_INTERCEPT && appRule.isEnabled) {
+            Log.d(TAG, "Don't intercept rule active for: $packageName - letting notification through")
+            // Still store it in database for history, but don't modify or cancel original
+            val appName = try {
+                val packageManager = packageManager
+                val appInfo = packageManager.getApplicationInfo(packageName, 0)
+                packageManager.getApplicationLabel(appInfo).toString()
+            } catch (e: PackageManager.NameNotFoundException) {
+                packageName
+            }
+            val title = notification.extras.getCharSequence("android.title")?.toString() ?: ""
+            val text = notification.extras.getCharSequence("android.text")?.toString() ?: ""
+            val category = notification.category
+            val notificationData = NotificationData(
+                packageName = packageName,
+                appName = appName,
+                title = title,
+                text = text,
+                category = category,
+                importance = NotificationImportance.NORMAL, // Don't classify
+                timestamp = sbn.postTime
+            )
+            serviceScope.launch {
+                notificationRepository.upsertWithDedup(notificationData, 3_000L)
+            }
+            return // Don't process further - let original notification through
         }
         
         // Don't suppress ongoing notifications (music players, calls, etc.) - let them through

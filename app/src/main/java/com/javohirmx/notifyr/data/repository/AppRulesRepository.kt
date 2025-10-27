@@ -134,7 +134,7 @@ class AppRulesRepository @Inject constructor(
         return _appRules.value.values.toList()
     }
     
-    fun setAppRule(packageName: String, appName: String, ruleType: AppRuleType?) {
+    fun setAppRule(packageName: String, appName: String, ruleType: AppRuleType?, isEnabled: Boolean = true) {
         val currentRules = _appRules.value.toMutableMap()
         
         if (ruleType == null) {
@@ -143,7 +143,8 @@ class AppRulesRepository @Inject constructor(
             currentRules[packageName] = AppRule(
                 packageName = packageName,
                 appName = appName,
-                ruleType = ruleType
+                ruleType = ruleType,
+                isEnabled = isEnabled
             )
         }
         

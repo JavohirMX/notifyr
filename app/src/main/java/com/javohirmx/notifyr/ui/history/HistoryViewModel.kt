@@ -18,7 +18,8 @@ import javax.inject.Inject
 class HistoryViewModel @Inject constructor(
     application: Application,
     private val notificationRepository: NotificationRepository,
-    private val groupNotificationsUseCase: GroupNotificationsUseCase
+    private val groupNotificationsUseCase: GroupNotificationsUseCase,
+    private val appRulesRepository: com.javohirmx.notifyr.data.repository.AppRulesRepository
 ) : AndroidViewModel(application) {
     
     private val _uiState = MutableStateFlow(HistoryUiState())
@@ -243,6 +244,14 @@ class HistoryViewModel @Inject constructor(
     
     fun clearFilters() {
         _filterState.value = FilterState()
+    }
+    
+    fun setAppRule(packageName: String, appName: String, ruleType: com.javohirmx.notifyr.domain.model.AppRuleType) {
+        appRulesRepository.setAppRule(packageName, appName, ruleType)
+    }
+    
+    fun removeAppRule(packageName: String) {
+        appRulesRepository.removeAppRule(packageName)
     }
     
     fun markAsRead(notification: NotificationData) {

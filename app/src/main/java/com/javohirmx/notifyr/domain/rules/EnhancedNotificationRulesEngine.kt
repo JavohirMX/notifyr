@@ -189,6 +189,7 @@ class EnhancedNotificationRulesEngine @Inject constructor(
         val appRule = appRulesRepository.getAppRule(notification.packageName)
         if (appRule != null) {
             return when (appRule.ruleType) {
+                AppRuleType.DONT_INTERCEPT -> Priority.NORMAL  // No priority change for don't intercept
                 AppRuleType.ALWAYS_URGENT -> Priority.IMPORTANT
                 AppRuleType.ALWAYS_IGNORE -> Priority.LOW
                 AppRuleType.FILTER_KEYWORDS -> Priority.NORMAL

@@ -55,6 +55,8 @@ fun HistoryScreen(
     val filterState by viewModel.filterState.collectAsStateWithLifecycle()
     
     var showFilterSheet by remember { mutableStateOf(false) }
+    var showAppRuleDialog by remember { mutableStateOf(false) }
+    var selectedAppForRule by remember { mutableStateOf<Pair<String, String>?>(null) } // packageName, appName
     
     Scaffold(
         topBar = {
@@ -160,7 +162,11 @@ fun HistoryScreen(
                         onMarkAllAsRead = { viewModel.markAllAsRead(NotificationImportance.URGENT) },
                         isLoading = uiState.isLoading,
                         onMarkGroupAsRead = viewModel::markGroupAsRead,
-                        onDeleteGroup = viewModel::deleteGroup
+                        onDeleteGroup = viewModel::deleteGroup,
+                        onSetAppRule = { packageName, appName ->
+                            selectedAppForRule = Pair(packageName, appName)
+                            showAppRuleDialog = true
+                        }
                     )
                     1 -> NotificationList(
                         notifications = uiState.normalNotifications,
@@ -170,7 +176,11 @@ fun HistoryScreen(
                         onMarkAllAsRead = { viewModel.markAllAsRead(NotificationImportance.NORMAL) },
                         isLoading = uiState.isLoading,
                         onMarkGroupAsRead = viewModel::markGroupAsRead,
-                        onDeleteGroup = viewModel::deleteGroup
+                        onDeleteGroup = viewModel::deleteGroup,
+                        onSetAppRule = { packageName, appName ->
+                            selectedAppForRule = Pair(packageName, appName)
+                            showAppRuleDialog = true
+                        }
                     )
                     2 -> NotificationList(
                         notifications = uiState.ignoredNotifications,
@@ -180,7 +190,11 @@ fun HistoryScreen(
                         onMarkAllAsRead = { viewModel.markAllAsRead(NotificationImportance.IGNORE) },
                         isLoading = uiState.isLoading,
                         onMarkGroupAsRead = viewModel::markGroupAsRead,
-                        onDeleteGroup = viewModel::deleteGroup
+                        onDeleteGroup = viewModel::deleteGroup,
+                        onSetAppRule = { packageName, appName ->
+                            selectedAppForRule = Pair(packageName, appName)
+                            showAppRuleDialog = true
+                        }
                     )
                 }
             }
@@ -197,6 +211,24 @@ fun HistoryScreen(
                 onToggleContext = viewModel::toggleContextFilter,
                 onSenderChange = viewModel::updateSenderFilter,
                 onDismiss = { showFilterSheet = false }
+            )
+        }
+        
+        // App Rule Dialog
+        if (showAppRuleDialog && selectedAppForRule != null) {
+            val (packageName, appName) = selectedAppForRule!!
+            com.javohirmx.notifyr.ui.settings.AppRuleDialog(
+                app = AppInfo(packageName, appName),
+                currentRule = null, // Could load current rule if needed
+                onDismiss = { showAppRuleDialog = false },
+                onSelectRule = { ruleType ->
+                    viewModel.setAppRule(packageName, appName, ruleType)
+                    showAppRuleDialog = false
+                },
+                onRemoveRule = {
+                    viewModel.removeAppRule(packageName)
+                    showAppRuleDialog = false
+                }
             )
         }
     }
@@ -261,7 +293,8 @@ fun NotificationList(
     onMarkAllAsRead: () -> Unit,
     isLoading: Boolean,
     onMarkGroupAsRead: (NotificationGroup) -> Unit = {},
-    onDeleteGroup: (NotificationGroup) -> Unit = {}
+    onDeleteGroup: (NotificationGroup) -> Unit = {},
+    onSetAppRule: ((String, String) -> Unit)? = null
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         if (isLoading) {
@@ -383,7 +416,8 @@ fun NotificationList(
                                 NotificationHistoryCard(
                                     notification = item.notification,
                                     onMarkAsRead = { onMarkAsRead(item.notification) },
-                                    onDelete = { onDelete(item.notification) }
+                                    onDelete = { onDelete(item.notification) },
+                                    onSetAppRule = onSetAppRule
                                 )
                             }
                             is NotificationItem.Group -> {
@@ -733,7 +767,8 @@ private fun GroupedNotificationItem(
 fun NotificationHistoryCard(
     notification: NotificationData,
     onMarkAsRead: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onSetAppRule: ((String, String) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val packageManager = context.packageManager
@@ -747,6 +782,8 @@ fun NotificationHistoryCard(
             } catch (_: Exception) { }
         }
     }
+    
+    var showAppRuleMenu by remember { mutableStateOf(false) }
     
     ElevatedCard(
         modifier = Modifier
@@ -934,41 +971,79 @@ fun NotificationHistoryCard(
             
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (!notification.isRead) {
+                // App rule button (left side)
+                if (onSetAppRule != null) {
                     TextButton(
-                        onClick = onMarkAsRead,
+                        onClick = { showAppRuleMenu = true },
                         contentPadding = PaddingValues(horizontal = 12.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.CheckCircle,
+                            imageVector = Icons.Default.Settings,
                             contentDescription = null,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Mark read")
+                        Text("App Rule")
                     }
-                    Spacer(modifier = Modifier.width(4.dp))
                 }
                 
-                TextButton(
-                    onClick = onDelete,
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Delete")
+                Spacer(modifier = Modifier.weight(1f))
+                
+                // Mark read and delete buttons (right side)
+                Row {
+                    if (!notification.isRead) {
+                        TextButton(
+                            onClick = onMarkAsRead,
+                            contentPadding = PaddingValues(horizontal = 12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Mark read")
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    
+                    TextButton(
+                        onClick = onDelete,
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Delete")
+                    }
                 }
             }
+        }
+        
+        // App Rule Quick Menu
+        DropdownMenu(
+            expanded = showAppRuleMenu,
+            onDismissRequest = { showAppRuleMenu = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("Set app rule...") },
+                onClick = {
+                    showAppRuleMenu = false
+                    onSetAppRule?.invoke(notification.packageName, notification.appName)
+                },
+                leadingIcon = {
+                    Icon(Icons.Default.Settings, contentDescription = null)
+                }
+            )
         }
     }
 }

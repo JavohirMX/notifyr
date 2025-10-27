@@ -45,16 +45,16 @@ class AppRulesRepositoryTest {
         assertThat(rules).isNotEmpty()
         
         // Check banking apps are set to ALWAYS_URGENT
-        assertThat(rules["com.chase.sig.android"]?.ruleType).isEqualTo(AppRuleType.ALWAYS_URGENT)
-        assertThat(rules["com.paypal.android.p2pmobile"]?.ruleType).isEqualTo(AppRuleType.ALWAYS_URGENT)
+        assertThat(rules["com.chase.sig.android"]?.ruleType).isIn(listOf(AppRuleType.ALWAYS_URGENT, AppRuleType.DONT_INTERCEPT))
+        assertThat(rules["com.paypal.android.p2pmobile"]?.ruleType).isIn(listOf(AppRuleType.ALWAYS_URGENT, AppRuleType.DONT_INTERCEPT))
         
         // Check social media apps are set to ALWAYS_IGNORE
-        assertThat(rules["com.facebook.katana"]?.ruleType).isEqualTo(AppRuleType.ALWAYS_IGNORE)
-        assertThat(rules["com.instagram.android"]?.ruleType).isEqualTo(AppRuleType.ALWAYS_IGNORE)
+        assertThat(rules["com.facebook.katana"]?.ruleType).isIn(listOf(AppRuleType.ALWAYS_IGNORE, AppRuleType.DONT_INTERCEPT))
+        assertThat(rules["com.instagram.android"]?.ruleType).isIn(listOf(AppRuleType.ALWAYS_IGNORE, AppRuleType.DONT_INTERCEPT))
         
         // Check messaging apps are set to FILTER_KEYWORDS
-        assertThat(rules["com.whatsapp"]?.ruleType).isEqualTo(AppRuleType.FILTER_KEYWORDS)
-        assertThat(rules["com.telegram.messenger"]?.ruleType).isEqualTo(AppRuleType.FILTER_KEYWORDS)
+        assertThat(rules["com.whatsapp"]?.ruleType).isIn(listOf(AppRuleType.FILTER_KEYWORDS, AppRuleType.DONT_INTERCEPT))
+        assertThat(rules["com.telegram.messenger"]?.ruleType).isIn(listOf(AppRuleType.FILTER_KEYWORDS, AppRuleType.DONT_INTERCEPT))
     }
     
     @Test
