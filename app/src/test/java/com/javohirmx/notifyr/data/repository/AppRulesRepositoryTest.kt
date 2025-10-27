@@ -93,6 +93,9 @@ class AppRulesRepositoryTest {
         // When
         repository.setAppRule(packageName, appName, ruleType)
         
+        // Wait for the rule to be persisted and flow updated
+        kotlinx.coroutines.delay(100)
+        
         // Then
         val rules = repository.appRules.first()
         val rule = rules[packageName]

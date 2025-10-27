@@ -52,6 +52,9 @@ fun HistoryScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val filterState by viewModel.filterState.collectAsStateWithLifecycle()
+    
+    var showFilterSheet by remember { mutableStateOf(false) }
     
     Scaffold(
         topBar = {
@@ -69,6 +72,14 @@ fun HistoryScreen(
                             .padding(horizontal = 16.dp, vertical = 12.dp)
                     )
                 }
+                
+                // Filter Row
+                FilterRow(
+                    filterState = filterState,
+                    availableApps = uiState.availableApps,
+                    onFilterClick = { showFilterSheet = true },
+                    onClearFilters = viewModel::clearFilters
+                )
             }
         }
     ) { paddingValues ->
@@ -173,6 +184,20 @@ fun HistoryScreen(
                     )
                 }
             }
+        }
+        
+        // Filter Bottom Sheet
+        if (showFilterSheet) {
+            FilterBottomSheet(
+                filterState = filterState,
+                availableApps = uiState.availableApps,
+                onReadStatusChange = viewModel::updateReadStatusFilter,
+                onTimeRangeChange = { range -> viewModel.updateTimeRangeFilter(range) },
+                onToggleApp = viewModel::toggleAppFilter,
+                onToggleContext = viewModel::toggleContextFilter,
+                onSenderChange = viewModel::updateSenderFilter,
+                onDismiss = { showFilterSheet = false }
+            )
         }
     }
 }
