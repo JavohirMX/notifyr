@@ -96,6 +96,12 @@ class DigestSettingsViewModel @Inject constructor(
             digestSettingsRepository.updateDigestSettings(settings)
         }
     }
+    
+    fun triggerManualDigest() {
+        viewModelScope.launch {
+            digestScheduler.showDigest()
+        }
+    }
 }
 
 data class DigestSettingsUiState(

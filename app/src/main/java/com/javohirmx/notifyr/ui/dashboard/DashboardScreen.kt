@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -78,21 +79,26 @@ fun DashboardScreen(
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        // View Digest Button
-        Button(
-            onClick = { navController.navigate(com.javohirmx.notifyr.ui.navigation.Screen.DigestView.route) },
-            modifier = Modifier.fillMaxWidth(),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+        // Digest Preview Card
+        val digest = uiState.digestPreview
+        if (digest != null && digest.totalCount > 0) {
+            DigestPreviewCard(
+                digest = digest,
+                onClick = { navController.navigate(com.javohirmx.notifyr.ui.navigation.Screen.DigestView.route) }
             )
-        ) {
-            Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("View Notification Digest", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(16.dp))
+        } else {
+            // View Digest Button (when no preview available)
+            OutlinedButton(
+                onClick = { navController.navigate(com.javohirmx.notifyr.ui.navigation.Screen.DigestView.route) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("View Notification Digest", style = MaterialTheme.typography.titleMedium)
+            }
+            Spacer(modifier = Modifier.height(16.dp))
         }
-        
-        Spacer(modifier = Modifier.height(16.dp))
         
         // Recent Urgent Notifications
         Text(
@@ -321,5 +327,88 @@ private fun formatTimestamp(timestamp: Long): String {
         diff < 3600_000 -> "${diff / 60_000}m ago"
         diff < 86400_000 -> "${diff / 3600_000}h ago"
         else -> "${diff / 86400_000}d ago"
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun DigestPreviewCard(
+    digest: com.javohirmx.notifyr.domain.model.EnhancedDigest,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "📬",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Digest Ready",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                }
+                Badge(
+                    containerColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Text("${digest.totalCount}")
+                }
+            }
+            
+            Spacer(Modifier.height(8.dp))
+            
+            Text(
+                text = digest.summary.summaryText,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                maxLines = 2
+            )
+            
+            Spacer(Modifier.height(12.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = digest.timeRange,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "View Full Digest",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Icon(
+                        Icons.Default.ArrowForward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
     }
 }

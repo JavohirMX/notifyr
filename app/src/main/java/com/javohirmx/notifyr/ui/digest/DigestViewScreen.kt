@@ -6,7 +6,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +31,23 @@ fun DigestViewScreen(
     viewModel: DigestViewModel = hiltViewModel()
 ) {
     val digest by viewModel.currentDigest.collectAsStateWithLifecycle()
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+    
+    val pullRefreshState = rememberPullToRefreshState()
+    
+    LaunchedEffect(isRefreshing) {
+        if (isRefreshing) {
+            pullRefreshState.startRefresh()
+        } else {
+            pullRefreshState.endRefresh()
+        }
+    }
+    
+    LaunchedEffect(pullRefreshState.isRefreshing) {
+        if (pullRefreshState.isRefreshing) {
+            viewModel.refreshDigest()
+        }
+    }
     
     Scaffold(
         topBar = {
@@ -37,6 +59,9 @@ fun DigestViewScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { viewModel.refreshDigest() }) {
+                        Icon(Icons.Default.Refresh, "Refresh")
+                    }
                     if (digest != null && digest!!.totalCount > 0) {
                         TextButton(onClick = { viewModel.markAllAsRead() }) {
                             Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(20.dp))
@@ -81,70 +106,83 @@ fun DigestViewScreen(
                 }
             } else {
                 // Show digest content
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .nestedScroll(pullRefreshState.nestedScrollConnection)
                 ) {
-                    // Header
-                    item {
-                        DigestHeader(digest!!)
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Header
+                        item {
+                            DigestHeader(digest!!)
+                        }
+                        
+                        // Needs Attention Section
+                        if (digest!!.needsAttention.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "⭐ Needs Attention (${digest!!.needsAttention.size})",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            items(digest!!.needsAttention) { notification ->
+                                NotificationQuickCard(
+                                    appName = notification.appName,
+                                    title = notification.title,
+                                    text = notification.text,
+                                    onMarkRead = { viewModel.markNotificationRead(notification.id) },
+                                    onDismiss = { viewModel.dismissNotification(notification.id) }
+                                )
+                            }
+                            item {
+                                Spacer(Modifier.height(8.dp))
+                            }
+                        }
+                        
+                        // Conversations Section
+                        if (digest!!.conversations.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "💬 Conversations (${digest!!.conversations.size})",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            items(digest!!.conversations) { conversation ->
+                                ConversationCard(conversation)
+                            }
+                            item {
+                                Spacer(Modifier.height(8.dp))
+                            }
+                        }
+                        
+                        // Other Apps Section
+                        if (digest!!.appGroups.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "📱 Other Updates (${digest!!.appGroups.sumOf { it.notificationCount }})",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            items(digest!!.appGroups) { appGroup ->
+                                AppGroupCard(appGroup)
+                            }
+                        }
                     }
-                    
-                    // Needs Attention Section
-                    if (digest!!.needsAttention.isNotEmpty()) {
-                        item {
-                            Text(
-                                text = "⭐ Needs Attention (${digest!!.needsAttention.size})",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        items(digest!!.needsAttention) { notification ->
-                            NotificationQuickCard(
-                                appName = notification.appName,
-                                title = notification.title,
-                                text = notification.text
-                            )
-                        }
-                        item {
-                            Spacer(Modifier.height(8.dp))
-                        }
-                    }
-                    
-                    // Conversations Section
-                    if (digest!!.conversations.isNotEmpty()) {
-                        item {
-                            Text(
-                                text = "💬 Conversations (${digest!!.conversations.size})",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        items(digest!!.conversations) { conversation ->
-                            ConversationCard(conversation)
-                        }
-                        item {
-                            Spacer(Modifier.height(8.dp))
-                        }
-                    }
-                    
-                    // Other Apps Section
-                    if (digest!!.appGroups.isNotEmpty()) {
-                        item {
-                            Text(
-                                text = "📱 Other Updates (${digest!!.appGroups.sumOf { it.notificationCount }})",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                        items(digest!!.appGroups) { appGroup ->
-                            AppGroupCard(appGroup)
-                        }
-                    }
+                
+                PullToRefreshContainer(
+                    state = pullRefreshState,
+                    modifier = Modifier.align(Alignment.TopCenter)
+                )
                 }
             }
         }
@@ -249,33 +287,68 @@ fun AppGroupCard(appGroup: AppGroup) {
 }
 
 @Composable
-fun NotificationQuickCard(appName: String, title: String, text: String) {
+fun NotificationQuickCard(
+    appName: String, 
+    title: String, 
+    text: String,
+    onMarkRead: () -> Unit = {},
+    onDismiss: () -> Unit = {}
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
         )
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = appName,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.error,
-                fontWeight = FontWeight.Bold
-            )
-            if (title.isNotBlank()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
+                    text = appName,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.Bold
                 )
+                if (title.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                if (text.isNotBlank()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = text,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2
+                    )
+                }
             }
-            if (text.isNotBlank()) {
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2
-                )
+            
+            Row {
+                IconButton(onClick = onMarkRead) {
+                    Icon(
+                        Icons.Default.CheckCircle, 
+                        contentDescription = "Mark as read",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        Icons.Default.Close, 
+                        contentDescription = "Dismiss",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }

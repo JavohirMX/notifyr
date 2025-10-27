@@ -5,6 +5,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -68,6 +69,52 @@ fun DigestSettingsScreen(
             }
             
             Spacer(modifier = Modifier.height(24.dp))
+            
+            // On-Demand Settings
+            if (selectedMode == DigestMode.ON_DEMAND) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "Manual Digest Mode",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text(
+                            text = "Digests will only appear when you manually trigger them",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        
+                        Spacer(modifier = Modifier.height(16.dp))
+                        
+                        Button(
+                            onClick = { 
+                                viewModel.triggerManualDigest()
+                                navController.navigate(com.javohirmx.notifyr.ui.navigation.Screen.DigestView.route)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Notifications, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text("Generate Digest Now")
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+            }
             
             // Context-Aware Settings
             if (selectedMode == DigestMode.CONTEXT_AWARE) {

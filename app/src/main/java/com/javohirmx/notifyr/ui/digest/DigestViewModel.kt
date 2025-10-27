@@ -6,7 +6,9 @@ import com.javohirmx.notifyr.data.repository.NotificationRepository
 import com.javohirmx.notifyr.domain.digest.SmartDigestScheduler
 import com.javohirmx.notifyr.domain.model.EnhancedDigest
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -18,9 +20,22 @@ class DigestViewModel @Inject constructor(
     
     val currentDigest: StateFlow<EnhancedDigest?> = digestScheduler.currentDigest
     
+    private val _isRefreshing = MutableStateFlow(false)
+    val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
+    
+    init {
+        // Load digest on initialization
+        refreshDigest()
+    }
+    
     fun refreshDigest() {
         viewModelScope.launch {
-            digestScheduler.showDigest()
+            _isRefreshing.value = true
+            try {
+                digestScheduler.showDigest()
+            } finally {
+                _isRefreshing.value = false
+            }
         }
     }
     
@@ -34,7 +49,27 @@ class DigestViewModel @Inject constructor(
                 allNotifications.forEach { notification ->
                     notificationRepository.markAsRead(notification.id, true)
                 }
+                
+                // Refresh digest after marking all as read
+                refreshDigest()
             }
+        }
+    }
+    
+    fun markNotificationRead(notificationId: Long) {
+        viewModelScope.launch {
+            notificationRepository.markAsRead(notificationId, true)
+            // Refresh digest to update UI
+            refreshDigest()
+        }
+    }
+    
+    fun dismissNotification(notificationId: Long) {
+        viewModelScope.launch {
+            // Mark as read and dismissed
+            notificationRepository.markAsRead(notificationId, true)
+            // Refresh digest to update UI
+            refreshDigest()
         }
     }
 }

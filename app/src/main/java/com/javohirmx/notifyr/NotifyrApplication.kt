@@ -3,7 +3,7 @@ package com.javohirmx.notifyr
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
-import com.javohirmx.notifyr.service.DigestScheduler
+import com.javohirmx.notifyr.domain.digest.SmartDigestScheduler
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -14,7 +14,7 @@ class NotifyrApplication : Application(), Configuration.Provider {
     lateinit var workerFactory: HiltWorkerFactory
     
     @Inject
-    lateinit var digestScheduler: DigestScheduler
+    lateinit var smartDigestScheduler: SmartDigestScheduler
     
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -23,11 +23,16 @@ class NotifyrApplication : Application(), Configuration.Provider {
     
     override fun onCreate() {
         super.onCreate()
-        scheduleDigestNotifications()
+        initializeDigestScheduler()
     }
     
-    private fun scheduleDigestNotifications() {
-        // Schedule digest notifications every 6 hours
-        digestScheduler.scheduleDigestNotifications(6L)
+    private fun initializeDigestScheduler() {
+        // Initialize smart digest scheduler (context-aware)
+        smartDigestScheduler.initialize()
+    }
+    
+    override fun onTerminate() {
+        super.onTerminate()
+        smartDigestScheduler.shutdown()
     }
 }

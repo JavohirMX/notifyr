@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.javohirmx.notifyr.data.repository.NotificationRepository
+import com.javohirmx.notifyr.domain.digest.SmartDigestScheduler
+import com.javohirmx.notifyr.domain.model.EnhancedDigest
 import com.javohirmx.notifyr.domain.model.NotificationData
 import com.javohirmx.notifyr.domain.model.NotificationImportance
 import com.javohirmx.notifyr.utils.PermissionUtils
@@ -15,7 +17,8 @@ import javax.inject.Inject
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     application: Application,
-    private val notificationRepository: NotificationRepository
+    private val notificationRepository: NotificationRepository,
+    private val smartDigestScheduler: SmartDigestScheduler
 ) : AndroidViewModel(application) {
     
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -24,6 +27,7 @@ class DashboardViewModel @Inject constructor(
     init {
         loadDashboardData()
         checkPermissions()
+        loadDigestPreview()
     }
     
     private fun loadDashboardData() {
@@ -41,6 +45,14 @@ class DashboardViewModel @Inject constructor(
                     recentUrgentNotifications = urgent.take(5) // Show only 5 most recent
                 )
             }.collect()
+        }
+    }
+    
+    private fun loadDigestPreview() {
+        viewModelScope.launch {
+            smartDigestScheduler.currentDigest.collect { digest ->
+                _uiState.value = _uiState.value.copy(digestPreview = digest)
+            }
         }
     }
     
@@ -65,5 +77,6 @@ data class DashboardUiState(
     val normalCount: Int = 0,
     val ignoredCount: Int = 0,
     val recentUrgentNotifications: List<NotificationData> = emptyList(),
+    val digestPreview: EnhancedDigest? = null,
     val isLoading: Boolean = false
 )

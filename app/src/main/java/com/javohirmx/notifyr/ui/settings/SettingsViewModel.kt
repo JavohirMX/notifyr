@@ -4,7 +4,6 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.javohirmx.notifyr.data.repository.NotificationRepository
-import com.javohirmx.notifyr.service.DigestScheduler
 import com.javohirmx.notifyr.utils.PermissionUtils
 import com.javohirmx.notifyr.utils.TestNotificationHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -16,8 +15,7 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     application: Application,
     private val notificationRepository: NotificationRepository,
-    private val testNotificationHelper: TestNotificationHelper,
-    private val digestScheduler: DigestScheduler
+    private val testNotificationHelper: TestNotificationHelper
 ) : AndroidViewModel(application) {
     
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -110,21 +108,6 @@ class SettingsViewModel @Inject constructor(
             versionTapCount = 0
         )
     }
-    
-    fun toggleDigestNotifications() {
-        viewModelScope.launch {
-            val currentState = _uiState.value.isDigestEnabled
-            if (currentState) {
-                digestScheduler.cancelDigestNotifications()
-            } else {
-                digestScheduler.scheduleDigestNotifications(6L)
-            }
-            
-            _uiState.value = _uiState.value.copy(
-                isDigestEnabled = !currentState
-            )
-        }
-    }
 }
 
 data class SettingsUiState(
@@ -132,6 +115,5 @@ data class SettingsUiState(
     val totalNotifications: Int = 0,
     val isLoading: Boolean = true,
     val isDeveloperModeEnabled: Boolean = false,
-    val versionTapCount: Int = 0,
-    val isDigestEnabled: Boolean = true
+    val versionTapCount: Int = 0
 )

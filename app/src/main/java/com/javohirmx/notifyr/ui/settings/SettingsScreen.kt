@@ -183,15 +183,6 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(8.dp))
             
             SettingCard(
-                title = "Digest Notifications",
-                description = "Get periodic summaries of normal notifications",
-                icon = Icons.Default.Notifications,
-                onClick = { viewModel.toggleDigestNotifications() }
-            )
-            
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            SettingCard(
                 title = "Clear All Data",
                 description = "Delete all notification history",
                 icon = Icons.Default.Delete,
