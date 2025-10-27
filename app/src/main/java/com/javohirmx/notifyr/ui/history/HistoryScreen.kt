@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.animation.expandVertically
@@ -40,8 +42,9 @@ import com.javohirmx.notifyr.domain.model.NotificationData
 import com.javohirmx.notifyr.domain.model.NotificationImportance
 import com.javohirmx.notifyr.domain.model.NotificationItem
 import com.javohirmx.notifyr.domain.model.NotificationGroup
+import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun HistoryScreen(
     @Suppress("UNUSED_PARAMETER") navController: NavController,
@@ -74,8 +77,10 @@ fun HistoryScreen(
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Enhanced Tab Layout
-            var selectedTabIndex by remember { mutableIntStateOf(0) }
+            // Enhanced Tab Layout with Pager
+            val pagerState = rememberPagerState(pageCount = { 3 })
+            val scope = rememberCoroutineScope()
+            
             val tabs = listOf(
                 TabData("Urgent", uiState.urgentNotifications.size, Icons.Default.Warning),
                 TabData("Normal", uiState.normalNotifications.size, Icons.Default.Notifications),
@@ -83,14 +88,18 @@ fun HistoryScreen(
             )
             
             ScrollableTabRow(
-                selectedTabIndex = selectedTabIndex,
+                selectedTabIndex = pagerState.currentPage,
                 containerColor = MaterialTheme.colorScheme.surface,
                 edgePadding = 16.dp
             ) {
                 tabs.forEachIndexed { index, tabData ->
                     Tab(
-                        selected = selectedTabIndex == index,
-                        onClick = { selectedTabIndex = index },
+                        selected = pagerState.currentPage == index,
+                        onClick = { 
+                            scope.launch {
+                                pagerState.animateScrollToPage(index)
+                            }
+                        },
                         icon = {
                             Icon(
                                 imageVector = tabData.icon,
@@ -126,15 +135,12 @@ fun HistoryScreen(
             
             HorizontalDivider()
             
-            // Tab Content with animation
-            AnimatedContent(
-                targetState = selectedTabIndex,
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(300)) togetherWith fadeOut(animationSpec = tween(300))
-                },
-                label = "tab_content"
-            ) { tabIndex ->
-                when (tabIndex) {
+            // Swipeable Tab Content
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                when (page) {
                     0 -> NotificationList(
                         notifications = uiState.urgentNotifications,
                         importance = NotificationImportance.URGENT,
@@ -384,27 +390,21 @@ fun NotificationGroupCard(
     val context = LocalContext.current
     var isExpanded by remember { mutableStateOf(false) }
     
-    val cardElevation by animateDpAsState(
-        targetValue = if (group.isAllRead) 0.dp else 3.dp,
-        label = "group_card_elevation"
-    )
-    
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize(),
         elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = cardElevation
+            defaultElevation = if (group.isAllRead) 0.dp else 3.dp
         ),
-        colors = if (group.isAllRead) {
-            CardDefaults.elevatedCardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            )
-        } else {
-            CardDefaults.elevatedCardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            )
-        }
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = if (group.isAllRead) {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
+        ),
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(
             modifier = Modifier
@@ -723,27 +723,21 @@ fun NotificationHistoryCard(
         }
     }
     
-    val cardElevation by animateDpAsState(
-        targetValue = if (notification.isRead) 0.dp else 2.dp,
-        label = "card_elevation"
-    )
-    
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize(),
         elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = cardElevation
+            defaultElevation = if (notification.isRead) 0.dp else 2.dp
         ),
-        colors = if (notification.isRead) {
-            CardDefaults.elevatedCardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            )
-        } else {
-            CardDefaults.elevatedCardColors(
-                containerColor = MaterialTheme.colorScheme.surface
-            )
-        }
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = if (notification.isRead) {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
+        ),
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(
             modifier = Modifier
@@ -790,22 +784,14 @@ fun NotificationHistoryCard(
                     Spacer(modifier = Modifier.width(12.dp))
                     
                     Column(modifier = Modifier.weight(1f)) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = notification.appName,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            
-                            // Priority indicator
-                            ImportanceBadge(importance = notification.importance)
-                        }
+                        Text(
+                            text = notification.appName,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                         
                         Text(
                             text = formatTimestamp(notification.timestamp),
@@ -1034,15 +1020,16 @@ private fun getImportanceColor(importance: NotificationImportance): androidx.com
 private fun formatTimestamp(timestamp: Long): String {
     val now = System.currentTimeMillis()
     val diff = now - timestamp
+    val fiveHours = 5 * 60 * 60 * 1000L // 5 hours in milliseconds
     
     return when {
         diff < 60_000 -> "Just now"
         diff < 3600_000 -> "${diff / 60_000}m ago"
-        diff < 86400_000 -> "${diff / 3600_000}h ago"
-        diff < 604800_000 -> "${diff / 86400_000}d ago"
+        diff < fiveHours -> "${diff / 3600_000}h ago"
         else -> {
-            val date = java.text.SimpleDateFormat("MMM dd", java.util.Locale.getDefault())
-            date.format(java.util.Date(timestamp))
+            // Show actual date and time for notifications over 5 hours old
+            val dateFormat = java.text.SimpleDateFormat("MMM dd, h:mm a", java.util.Locale.getDefault())
+            dateFormat.format(java.util.Date(timestamp))
         }
     }
 }

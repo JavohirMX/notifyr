@@ -38,11 +38,16 @@ class DashboardViewModel @Inject constructor(
                 notificationRepository.getNotificationsByImportance(NotificationImportance.NORMAL),
                 notificationRepository.getNotificationsByImportance(NotificationImportance.IGNORE)
             ) { urgent, normal, ignored ->
+                // Filter out notifications with both empty title and text
+                val nonEmptyUrgent = urgent.filter { it.title.isNotBlank() || it.text.isNotBlank() }
+                val nonEmptyNormal = normal.filter { it.title.isNotBlank() || it.text.isNotBlank() }
+                val nonEmptyIgnored = ignored.filter { it.title.isNotBlank() || it.text.isNotBlank() }
+                
                 _uiState.value = _uiState.value.copy(
-                    urgentCount = urgent.size,
-                    normalCount = normal.size,
-                    ignoredCount = ignored.size,
-                    recentUrgentNotifications = urgent.take(5) // Show only 5 most recent
+                    urgentCount = nonEmptyUrgent.size,
+                    normalCount = nonEmptyNormal.size,
+                    ignoredCount = nonEmptyIgnored.size,
+                    recentUrgentNotifications = nonEmptyUrgent.take(5) // Show only 5 most recent
                 )
             }.collect()
         }

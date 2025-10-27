@@ -39,17 +39,22 @@ class HistoryViewModel @Inject constructor(
                 notificationRepository.getNotificationsByImportance(NotificationImportance.IGNORE),
                 _searchQuery
             ) { urgent, normal, ignored, query ->
-                val filteredUrgent = if (query.isBlank()) urgent else urgent.filter { 
+                // Filter out notifications with both empty title and text
+                val nonEmptyUrgent = urgent.filter { it.title.isNotBlank() || it.text.isNotBlank() }
+                val nonEmptyNormal = normal.filter { it.title.isNotBlank() || it.text.isNotBlank() }
+                val nonEmptyIgnored = ignored.filter { it.title.isNotBlank() || it.text.isNotBlank() }
+                
+                val filteredUrgent = if (query.isBlank()) nonEmptyUrgent else nonEmptyUrgent.filter { 
                     it.title.contains(query, ignoreCase = true) || 
                     it.text.contains(query, ignoreCase = true) ||
                     it.appName.contains(query, ignoreCase = true)
                 }
-                val filteredNormal = if (query.isBlank()) normal else normal.filter { 
+                val filteredNormal = if (query.isBlank()) nonEmptyNormal else nonEmptyNormal.filter { 
                     it.title.contains(query, ignoreCase = true) || 
                     it.text.contains(query, ignoreCase = true) ||
                     it.appName.contains(query, ignoreCase = true)
                 }
-                val filteredIgnored = if (query.isBlank()) ignored else ignored.filter { 
+                val filteredIgnored = if (query.isBlank()) nonEmptyIgnored else nonEmptyIgnored.filter { 
                     it.title.contains(query, ignoreCase = true) || 
                     it.text.contains(query, ignoreCase = true) ||
                     it.appName.contains(query, ignoreCase = true)

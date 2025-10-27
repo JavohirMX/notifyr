@@ -2,10 +2,11 @@ package com.javohirmx.notifyr.ui.dashboard
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.ArrowForward
@@ -20,9 +21,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.javohirmx.notifyr.domain.model.NotificationImportance
+import com.javohirmx.notifyr.domain.model.NotificationData
 import com.javohirmx.notifyr.utils.PermissionUtils
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.content.Intent
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,15 +45,17 @@ fun DashboardScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Permission Status Card
-        PermissionStatusCard(
-            isNotificationListenerEnabled = uiState.isNotificationListenerEnabled,
-            onEnableClick = { 
-                viewModel.requestNotificationListenerPermission()
-            }
-        )
-        
-        Spacer(modifier = Modifier.height(16.dp))
+        // Permission Status Card - Only show if service is NOT active
+        if (!uiState.isNotificationListenerEnabled) {
+            PermissionStatusCard(
+                isNotificationListenerEnabled = uiState.isNotificationListenerEnabled,
+                onEnableClick = { 
+                    viewModel.requestNotificationListenerPermission()
+                }
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+        }
         
         // Statistics Cards
         Row(
@@ -93,7 +98,7 @@ fun DashboardScreen(
                 onClick = { navController.navigate(com.javohirmx.notifyr.ui.navigation.Screen.DigestView.route) },
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Icon(Icons.Default.List, contentDescription = null, modifier = Modifier.size(20.dp))
+                Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("View Notification Digest", style = MaterialTheme.typography.titleMedium)
             }
@@ -117,11 +122,7 @@ fun DashboardScreen(
                 items(uiState.recentUrgentNotifications) { notification ->
                     val context = LocalContext.current
                     NotificationCard(
-                        title = notification.title,
-                        text = notification.text,
-                        appName = notification.appName,
-                        timestamp = notification.timestamp,
-                        importance = notification.importance,
+                        notification = notification,
                         leadingIcon = {
                             AppIconUtils.AppIconOrPlaceholder(
                                 context = context,
@@ -259,14 +260,25 @@ fun StatCard(
 
 @Composable
 fun NotificationCard(
-    title: String,
-    text: String,
-    appName: String,
-    timestamp: Long,
-    importance: NotificationImportance,
+    notification: NotificationData,
     leadingIcon: (@Composable () -> Unit)? = null
 ) {
-    Card {
+    val context = LocalContext.current
+    val packageManager = context.packageManager
+    val onOpenApp = remember(notification.packageName) {
+        {
+            try {
+                val launchIntent: Intent? = packageManager.getLaunchIntentForPackage(notification.packageName)
+                if (launchIntent != null) {
+                    context.startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+            } catch (_: Exception) { }
+        }
+    }
+    
+    Card(
+        modifier = Modifier.clickable(onClick = onOpenApp)
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -283,13 +295,13 @@ fun NotificationCard(
                         Spacer(modifier = Modifier.width(8.dp))
                     }
                     Text(
-                        text = appName,
+                        text = notification.appName,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
                 Text(
-                    text = formatTimestamp(timestamp),
+                    text = formatTimestamp(notification.timestamp),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -297,18 +309,18 @@ fun NotificationCard(
             
             Spacer(modifier = Modifier.height(4.dp))
             
-            if (title.isNotBlank()) {
+            if (notification.title.isNotBlank()) {
                 Text(
-                    text = title,
+                    text = notification.title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Medium
                 )
                 Spacer(modifier = Modifier.height(2.dp))
             }
             
-            if (text.isNotBlank()) {
+            if (notification.text.isNotBlank()) {
                 Text(
-                    text = text,
+                    text = notification.text,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2
@@ -321,12 +333,17 @@ fun NotificationCard(
 private fun formatTimestamp(timestamp: Long): String {
     val now = System.currentTimeMillis()
     val diff = now - timestamp
+    val fiveHours = 5 * 60 * 60 * 1000L // 5 hours in milliseconds
     
     return when {
         diff < 60_000 -> "Just now"
         diff < 3600_000 -> "${diff / 60_000}m ago"
-        diff < 86400_000 -> "${diff / 3600_000}h ago"
-        else -> "${diff / 86400_000}d ago"
+        diff < fiveHours -> "${diff / 3600_000}h ago"
+        else -> {
+            // Show actual date and time for notifications over 5 hours old
+            val dateFormat = java.text.SimpleDateFormat("MMM dd, h:mm a", java.util.Locale.getDefault())
+            dateFormat.format(java.util.Date(timestamp))
+        }
     }
 }
 

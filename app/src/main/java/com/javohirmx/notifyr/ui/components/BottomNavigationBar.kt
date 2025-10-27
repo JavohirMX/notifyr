@@ -2,7 +2,7 @@ package com.javohirmx.notifyr.ui.components
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -50,6 +50,6 @@ data class BottomNavItem(
 
 private val bottomNavItems = listOf(
     BottomNavItem(Screen.Dashboard.route, Screen.Dashboard.title, Icons.Default.Home),
-    BottomNavItem(Screen.History.route, Screen.History.title, Icons.Default.List),
+    BottomNavItem(Screen.History.route, Screen.History.title, Icons.AutoMirrored.Filled.List),
     BottomNavItem(Screen.Settings.route, Screen.Settings.title, Icons.Default.Settings)
 )
