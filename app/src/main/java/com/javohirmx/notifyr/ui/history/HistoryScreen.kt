@@ -254,6 +254,10 @@ fun HistoryScreen(
                 onRemoveRule = {
                     viewModel.removeAppRule(packageName)
                     showAppRuleDialog = false
+                },
+                onSetTemporaryStatus = {
+                    // Temporary status feature not available from history screen
+                    showAppRuleDialog = false
                 }
             )
         }

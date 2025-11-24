@@ -13,7 +13,8 @@ data class AppSettings(
     val appRulesJson: String = "[]",
     val focusModeSettingsJson: String = "{}",
     val digestSettingsJson: String = "{}",
-    val keywordRulesJson: String = "[]"
+    val keywordRulesJson: String = "[]",
+    val temporaryStatusesJson: String = "[]"
 )
 
 object SettingsSerializer : Serializer<AppSettings> {

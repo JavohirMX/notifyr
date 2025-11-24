@@ -2,6 +2,7 @@ package com.javohirmx.notifyr.domain.rules
 
 import com.javohirmx.notifyr.data.repository.AppRulesRepository
 import com.javohirmx.notifyr.data.repository.KeywordRulesRepository
+import com.javohirmx.notifyr.data.repository.TemporaryAppStatusRepository
 import com.javohirmx.notifyr.domain.model.*
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -9,7 +10,8 @@ import javax.inject.Singleton
 @Singleton
 class NotificationRulesEngine @Inject constructor(
     private val appRulesRepository: AppRulesRepository,
-    private val keywordRulesRepository: KeywordRulesRepository
+    private val keywordRulesRepository: KeywordRulesRepository,
+    private val temporaryAppStatusRepository: TemporaryAppStatusRepository
 ) {
     
     // Default urgent keywords
@@ -49,33 +51,55 @@ class NotificationRulesEngine @Inject constructor(
     }
     
     private fun evaluateNotificationImportance(notification: NotificationData): NotificationImportance {
-        // Rule hierarchy modified to allow keywords to override default app behavior:
-        // 1. Contact rules (not implemented in simple version)
-        // 2. User-defined app rules (highest priority)
-        // 3. Keyword rules (can override default app behavior)
-        // 4. Default app rules
-        // 5. Default handling
+        // Rule hierarchy (highest to lowest priority):
+        // 1. Temporary app status (highest priority - checked first)
+        // 2. Contact rules (not implemented in simple version)
+        // 3. User-defined app rules
+        // 4. Keyword rules (can override default app behavior)
+        // 5. Default app rules
+        // 6. Default handling
         
-        // 2. User-defined app rules (highest priority)
+        // 1. Temporary app status (highest priority)
+        val temporaryStatus = evaluateTemporaryStatus(notification)
+        if (temporaryStatus != null) {
+            return temporaryStatus
+        }
+        
+        // 3. User-defined app rules
         val userAppImportance = evaluateUserAppRules(notification)
         if (userAppImportance != null) {
             return userAppImportance
         }
         
-        // 3. Keyword rules (can override default app behavior)
+        // 4. Keyword rules (can override default app behavior)
         val keywordImportance = evaluateKeywordRules(notification)
         if (keywordImportance != null) {
             return keywordImportance
         }
         
-        // 4. Default app rules
+        // 5. Default app rules
         val defaultAppImportance = evaluateDefaultAppRules(notification)
         if (defaultAppImportance != null) {
             return defaultAppImportance
         }
         
-        // 5. Default handling
+        // 6. Default handling
         return evaluateDefaultRules(notification)
+    }
+    
+    private fun evaluateTemporaryStatus(notification: NotificationData): NotificationImportance? {
+        val packageName = notification.packageName
+        val temporaryStatus = temporaryAppStatusRepository.getTemporaryStatus(packageName)
+        
+        if (temporaryStatus != null && !temporaryStatus.isExpired()) {
+            return when (temporaryStatus.status) {
+                TemporaryStatus.DONT_IGNORE -> NotificationImportance.NORMAL // Let through with normal processing
+                TemporaryStatus.IGNORE -> NotificationImportance.IGNORE
+                TemporaryStatus.URGENT -> NotificationImportance.URGENT
+            }
+        }
+        
+        return null // No active temporary status
     }
     
     private fun evaluateUserAppRules(notification: NotificationData): NotificationImportance? {

@@ -16,15 +16,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.javohirmx.notifyr.domain.model.AppRule
 import com.javohirmx.notifyr.domain.model.AppRuleType
+import com.javohirmx.notifyr.domain.model.TemporaryAppStatus
+import com.javohirmx.notifyr.domain.model.TemporaryStatus
 import com.javohirmx.notifyr.domain.model.description
 import com.javohirmx.notifyr.domain.model.displayName
 import com.javohirmx.notifyr.ui.history.AppInfo
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,6 +38,7 @@ fun AppRulesScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showRuleDialog by remember { mutableStateOf(false) }
+    var showTemporaryStatusDialog by remember { mutableStateOf(false) }
     var selectedApp by remember { mutableStateOf<AppInfo?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     
@@ -142,6 +147,7 @@ fun AppRulesScreen(
                         AppRuleCard(
                             app = app,
                             rule = uiState.rules[app.packageName],
+                            temporaryStatus = uiState.temporaryStatuses[app.packageName],
                             onClick = {
                                 selectedApp = app
                                 showRuleDialog = true
@@ -158,6 +164,9 @@ fun AppRulesScreen(
                             },
                             onRemoveRule = {
                                 viewModel.removeAppRule(app.packageName)
+                            },
+                            onRemoveTemporaryStatus = {
+                                viewModel.removeTemporaryStatus(app.packageName)
                             }
                         )
                     }
@@ -184,6 +193,32 @@ fun AppRulesScreen(
             onRemoveRule = {
                 viewModel.removeAppRule(selectedApp!!.packageName)
                 showRuleDialog = false
+            },
+            onSetTemporaryStatus = {
+                showRuleDialog = false
+                showTemporaryStatusDialog = true
+            }
+        )
+    }
+    
+    // Temporary status dialog
+    if (showTemporaryStatusDialog && selectedApp != null) {
+        TemporaryStatusDialog(
+            app = selectedApp!!,
+            currentTemporaryStatus = uiState.temporaryStatuses[selectedApp!!.packageName],
+            onDismiss = { showTemporaryStatusDialog = false },
+            onSetStatus = { status, durationMinutes ->
+                viewModel.setTemporaryStatus(
+                    selectedApp!!.packageName,
+                    selectedApp!!.appName,
+                    status,
+                    durationMinutes
+                )
+                showTemporaryStatusDialog = false
+            },
+            onRemoveStatus = {
+                viewModel.removeTemporaryStatus(selectedApp!!.packageName)
+                showTemporaryStatusDialog = false
             }
         )
     }
@@ -193,9 +228,11 @@ fun AppRulesScreen(
 fun AppRuleCard(
     app: AppInfo,
     rule: AppRule?,
+    temporaryStatus: TemporaryAppStatus?,
     onClick: () -> Unit,
     onToggleRule: (Boolean) -> Unit,
-    onRemoveRule: () -> Unit
+    onRemoveRule: () -> Unit,
+    onRemoveTemporaryStatus: () -> Unit
 ) {
     val context = LocalContext.current
     
@@ -239,12 +276,25 @@ fun AppRuleCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     
-                    if (rule != null) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        // Temporary status badge
+                        temporaryStatus?.let { tempStatus ->
+                            if (!tempStatus.isExpired()) {
+                                TemporaryStatusBadge(
+                                    temporaryStatus = tempStatus,
+                                    onRemove = onRemoveTemporaryStatus
+                                )
+                            }
+                        }
+                        
+                        // Permanent rule badge
+                        if (rule != null) {
                             AssistChip(
                                 onClick = onClick,
                                 label = {
@@ -283,13 +333,13 @@ fun AppRuleCard(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                        } else if (temporaryStatus == null || temporaryStatus.isExpired()) {
+                            Text(
+                                text = "No rule set",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                    } else {
-                        Text(
-                            text = "No rule set",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
             }
@@ -334,6 +384,74 @@ fun AppRuleCard(
     }
 }
 
+@Composable
+fun TemporaryStatusBadge(
+    temporaryStatus: TemporaryAppStatus,
+    onRemove: () -> Unit
+) {
+    var remainingMinutes by remember { mutableStateOf(temporaryStatus.getRemainingMinutes()) }
+    
+    // Update remaining time every minute
+    LaunchedEffect(temporaryStatus.expiresAt) {
+        while (remainingMinutes > 0) {
+            delay(60_000) // Wait 1 minute
+            remainingMinutes = temporaryStatus.getRemainingMinutes()
+            if (remainingMinutes <= 0) break
+        }
+    }
+    
+    val statusText = when (temporaryStatus.status) {
+        TemporaryStatus.DONT_IGNORE -> "Don't Ignore"
+        TemporaryStatus.IGNORE -> "Ignore"
+        TemporaryStatus.URGENT -> "Urgent"
+    }
+    
+    val statusColor = when (temporaryStatus.status) {
+        TemporaryStatus.DONT_IGNORE -> MaterialTheme.colorScheme.primaryContainer
+        TemporaryStatus.IGNORE -> MaterialTheme.colorScheme.surfaceVariant
+        TemporaryStatus.URGENT -> MaterialTheme.colorScheme.errorContainer
+    }
+    
+    val statusIcon = when (temporaryStatus.status) {
+        TemporaryStatus.DONT_IGNORE -> Icons.Default.CheckCircle
+        TemporaryStatus.IGNORE -> Icons.Default.Close
+        TemporaryStatus.URGENT -> Icons.Default.Warning
+    }
+    
+    AssistChip(
+        onClick = {},
+        label = {
+            Text(
+                text = "$statusText (${remainingMinutes}m)",
+                style = MaterialTheme.typography.labelSmall
+            )
+        },
+        leadingIcon = {
+            Icon(
+                imageVector = statusIcon,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp)
+            )
+        },
+        trailingIcon = {
+            IconButton(
+                onClick = onRemove,
+                modifier = Modifier.size(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Remove temporary status",
+                    modifier = Modifier.size(12.dp)
+                )
+            }
+        },
+        colors = AssistChipDefaults.assistChipColors(
+            containerColor = statusColor
+        ),
+        modifier = Modifier.height(24.dp)
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppRuleDialog(
@@ -341,7 +459,8 @@ fun AppRuleDialog(
     currentRule: AppRule?,
     onDismiss: () -> Unit,
     onSelectRule: (AppRuleType) -> Unit,
-    onRemoveRule: () -> Unit
+    onRemoveRule: () -> Unit,
+    onSetTemporaryStatus: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -363,6 +482,20 @@ fun AppRuleDialog(
                         isSelected = currentRule?.ruleType == ruleType,
                         onClick = { onSelectRule(ruleType) }
                     )
+                }
+                
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                
+                OutlinedButton(
+                    onClick = onSetTemporaryStatus,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Icon(Icons.Default.Info, contentDescription = null)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Set Temporary Status")
                 }
                 
                 if (currentRule != null) {
@@ -463,4 +596,208 @@ fun RuleOptionCard(
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TemporaryStatusDialog(
+    app: AppInfo,
+    currentTemporaryStatus: TemporaryAppStatus?,
+    onDismiss: () -> Unit,
+    onSetStatus: (TemporaryStatus, Int) -> Unit,
+    onRemoveStatus: () -> Unit
+) {
+    var selectedStatus by remember { 
+        mutableStateOf(currentTemporaryStatus?.status ?: TemporaryStatus.URGENT) 
+    }
+    var selectedDuration by remember { mutableStateOf(15) }
+    var customDuration by remember { mutableStateOf("") }
+    var useCustomDuration by remember { mutableStateOf(false) }
+    
+    val presetDurations = listOf(5, 15, 30, 60)
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text("Set Temporary Status for ${app.appName}")
+                Text(
+                    text = app.packageName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Status selection
+                Text(
+                    text = "Status",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TemporaryStatus.values().forEach { status ->
+                        FilterChip(
+                            selected = selectedStatus == status,
+                            onClick = { selectedStatus = status },
+                            label = {
+                                Text(
+                                    when (status) {
+                                        TemporaryStatus.DONT_IGNORE -> "Don't Ignore"
+                                        TemporaryStatus.IGNORE -> "Ignore"
+                                        TemporaryStatus.URGENT -> "Urgent"
+                                    }
+                                )
+                            },
+                            leadingIcon = if (selectedStatus == status) {
+                                {
+                                    Icon(
+                                        imageVector = when (status) {
+                                            TemporaryStatus.DONT_IGNORE -> Icons.Default.CheckCircle
+                                            TemporaryStatus.IGNORE -> Icons.Default.Close
+                                            TemporaryStatus.URGENT -> Icons.Default.Warning
+                                        },
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            } else null,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                
+                // Duration selection
+                Text(
+                    text = "Duration (minutes)",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                // Preset duration buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    presetDurations.forEach { duration ->
+                        FilterChip(
+                            selected = !useCustomDuration && selectedDuration == duration,
+                            onClick = {
+                                useCustomDuration = false
+                                selectedDuration = duration
+                            },
+                            label = { Text("${duration}m") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                
+                // Custom duration option
+                FilterChip(
+                    selected = useCustomDuration,
+                    onClick = { useCustomDuration = true },
+                    label = { Text("Custom") }
+                )
+                
+                if (useCustomDuration) {
+                    TextField(
+                        value = customDuration,
+                        onValueChange = { 
+                            customDuration = it.filter { char -> char.isDigit() }
+                            if (customDuration.isNotEmpty()) {
+                                selectedDuration = customDuration.toIntOrNull() ?: 1
+                            }
+                        },
+                        label = { Text("Minutes") },
+                        placeholder = { Text("Enter minutes") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = KeyboardType.Number
+                        )
+                    )
+                }
+                
+                // Show current temporary status if exists
+                currentTemporaryStatus?.let { tempStatus ->
+                    if (!tempStatus.isExpired()) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column {
+                                    Text(
+                                        text = "Current temporary status:",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = when (tempStatus.status) {
+                                            TemporaryStatus.DONT_IGNORE -> "Don't Ignore"
+                                            TemporaryStatus.IGNORE -> "Ignore"
+                                            TemporaryStatus.URGENT -> "Urgent"
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "${tempStatus.getRemainingMinutes()} minutes remaining",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                
+                                IconButton(onClick = onRemoveStatus) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "Remove",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+                
+                Button(
+                    onClick = {
+                        val duration = if (useCustomDuration && customDuration.isNotEmpty()) {
+                            customDuration.toIntOrNull() ?: 1
+                        } else {
+                            selectedDuration
+                        }
+                        onSetStatus(selectedStatus, duration)
+                    },
+                    enabled = if (useCustomDuration) customDuration.isNotEmpty() else true
+                ) {
+                    Text("Set")
+                }
+            }
+        }
+    )
 }
