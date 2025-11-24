@@ -189,6 +189,15 @@ fun SettingsScreen(
                 onClick = { showClearAllDialog = true },
                 isDestructive = true
             )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            SettingCard(
+                title = "Screen Time Settings",
+                description = "Configure screen time data retention",
+                icon = Icons.Default.Info,
+                onClick = { navController.navigate(Screen.ScreenTimeSettings.route) }
+            )
         }
         
         Spacer(modifier = Modifier.height(24.dp))

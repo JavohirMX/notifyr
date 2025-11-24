@@ -8,13 +8,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import android.content.Context
 
 @Database(
-    entities = [NotificationEntity::class],
-    version = 3,
+    entities = [NotificationEntity::class, ScreenTimeEntity::class],
+    version = 4,
     exportSchema = false
 )
 abstract class NotifyrDatabase : RoomDatabase() {
     
     abstract fun notificationDao(): NotificationDao
+    abstract fun screenTimeDao(): ScreenTimeDao
     
     companion object {
         const val DATABASE_NAME = "notifyr_database"
@@ -61,6 +62,40 @@ abstract class NotifyrDatabase : RoomDatabase() {
                 )
                 database.execSQL(
                     "CREATE INDEX IF NOT EXISTS index_notifications_packageName_timestamp ON notifications(packageName, timestamp)"
+                )
+            }
+        }
+        
+        /**
+         * Migration from version 3 to 4
+         * Adds: Screen time tracking table
+         */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Create screen_time table
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS screen_time (
+                        packageName TEXT NOT NULL,
+                        appName TEXT NOT NULL,
+                        date INTEGER NOT NULL,
+                        hour INTEGER NOT NULL,
+                        durationMs INTEGER NOT NULL,
+                        PRIMARY KEY(packageName, date, hour)
+                    )
+                """)
+                
+                // Create indices
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_screen_time_date ON screen_time(date)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_screen_time_packageName ON screen_time(packageName)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_screen_time_date_packageName ON screen_time(date, packageName)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_screen_time_date_hour ON screen_time(date, hour)"
                 )
             }
         }

@@ -9,6 +9,8 @@ import android.text.TextUtils
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import android.Manifest
+import android.app.AppOpsManager
+import android.os.Build
 
 object PermissionUtils {
     
@@ -82,5 +84,40 @@ object PermissionUtils {
      */
     fun areNotificationsEnabled(context: Context): Boolean {
         return NotificationManagerCompat.from(context).areNotificationsEnabled()
+    }
+    
+    /**
+     * Check if PACKAGE_USAGE_STATS permission is granted
+     */
+    fun isUsageStatsPermissionGranted(context: Context): Boolean {
+        return try {
+            val appOpsManager = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
+            val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                appOpsManager?.checkOpNoThrow(
+                    AppOpsManager.OPSTR_GET_USAGE_STATS,
+                    android.os.Process.myUid(),
+                    context.packageName
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                appOpsManager?.checkOpNoThrow(
+                    "android:get_usage_stats",
+                    android.os.Process.myUid(),
+                    context.packageName
+                )
+            }
+            mode == AppOpsManager.MODE_ALLOWED
+        } catch (e: Exception) {
+            false
+        }
+    }
+    
+    /**
+     * Open usage stats settings to grant PACKAGE_USAGE_STATS permission
+     */
+    fun openUsageStatsSettings(context: Context) {
+        val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
     }
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.javohirmx.notifyr.data.database.NotificationDao
 import com.javohirmx.notifyr.data.database.NotifyrDatabase
+import com.javohirmx.notifyr.data.database.ScreenTimeDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -25,7 +26,8 @@ object DatabaseModule {
         )
         .addMigrations(
             NotifyrDatabase.MIGRATION_1_2,
-            NotifyrDatabase.MIGRATION_2_3
+            NotifyrDatabase.MIGRATION_2_3,
+            NotifyrDatabase.MIGRATION_3_4
         )
         .fallbackToDestructiveMigration() // For MVP, allow destructive migration if needed
         .build()
@@ -34,5 +36,10 @@ object DatabaseModule {
     @Provides
     fun provideNotificationDao(database: NotifyrDatabase): NotificationDao {
         return database.notificationDao()
+    }
+    
+    @Provides
+    fun provideScreenTimeDao(database: NotifyrDatabase): ScreenTimeDao {
+        return database.screenTimeDao()
     }
 }

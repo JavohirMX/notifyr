@@ -20,6 +20,8 @@ import com.javohirmx.notifyr.ui.settings.DigestSettingsScreen
 import com.javohirmx.notifyr.ui.digest.DigestViewScreen
 import com.javohirmx.notifyr.ui.insights.InsightsScreen
 import com.javohirmx.notifyr.ui.ml.MLSettingsScreen
+import com.javohirmx.notifyr.ui.screentime.ScreenTimeScreen
+import com.javohirmx.notifyr.ui.settings.ScreenTimeSettingsScreen
 
 @Composable
 fun NotifyrNavigation(
@@ -93,6 +95,14 @@ fun NotifyrNavigation(
         composable(Screen.MLSettings.route) {
             MLSettingsScreen(navController = navController)
         }
+        
+        composable(Screen.ScreenTime.route) {
+            ScreenTimeScreen(navController = navController)
+        }
+        
+        composable(Screen.ScreenTimeSettings.route) {
+            ScreenTimeSettingsScreen(navController = navController)
+        }
     }
 }
 
@@ -112,4 +122,6 @@ sealed class Screen(val route: String, val title: String) {
     object DigestView : Screen("digest_view", "View Digest")
     object Insights : Screen("insights", "Insights")
     object MLSettings : Screen("ml_settings", "ML Settings")
+    object ScreenTime : Screen("screen_time", "Screen Time")
+    object ScreenTimeSettings : Screen("screen_time_settings", "Screen Time Settings")
 }
