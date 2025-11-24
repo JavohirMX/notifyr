@@ -20,6 +20,7 @@ import com.javohirmx.notifyr.domain.digest.NaturalLanguageDigestGenerator
 import com.javohirmx.notifyr.domain.model.EnhancedDigest
 import com.javohirmx.notifyr.domain.model.NotificationData
 import com.javohirmx.notifyr.domain.model.NotificationImportance
+import com.javohirmx.notifyr.utils.AppIconUtils
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -164,8 +165,19 @@ class NotificationManager @Inject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         
+        // Get app icon with improved fallback and caching
+        val density = context.resources.displayMetrics.density
+        val iconSizePx = (64 * density).toInt() // 64dp for notification large icons
+        val appIconBitmap = AppIconUtils.getAppIconBitmap(
+            context, 
+            notification.packageName, 
+            notification.appName, 
+            iconSizePx
+        )
+        
         val notificationBuilder = NotificationCompat.Builder(context, URGENT_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_urgent)
+            .setLargeIcon(appIconBitmap)
             .setContentTitle("🚨 ${notification.appName}")
             .setContentText(notification.title.ifBlank { notification.text })
             .setStyle(
@@ -248,8 +260,20 @@ class NotificationManager @Inject constructor(
             inboxStyle.addLine("... and ${normalNotifications.size - 5} more")
         }
         
+        // Get icon from first notification or use app icon (with caching)
+        val density = context.resources.displayMetrics.density
+        val iconSizePx = (64 * density).toInt()
+        val appIconBitmap = if (normalNotifications.isNotEmpty()) {
+            val firstNotification = normalNotifications.first()
+            AppIconUtils.getAppIconBitmap(context, firstNotification.packageName, firstNotification.appName, iconSizePx)
+        } else {
+            // Use app's own icon as fallback
+            AppIconUtils.getAppIconBitmap(context, context.packageName, "Notifyr", iconSizePx)
+        }
+        
         val notificationBuilder = NotificationCompat.Builder(context, DIGEST_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_normal)
+            .setLargeIcon(appIconBitmap)
             .setContentTitle("Daily Digest")
             .setContentText("${normalNotifications.size} normal notifications")
             .setStyle(inboxStyle)
@@ -331,8 +355,34 @@ class NotificationManager @Inject constructor(
             }
         }
         
+        // Get icon from first priority notification or first app, or use app icon (with caching)
+        val density = context.resources.displayMetrics.density
+        val iconSizePx = (64 * density).toInt()
+        val appIconBitmap = when {
+            // Try to get icon from first notification that needs attention
+            digest.needsAttention.isNotEmpty() -> {
+                val firstNotification = digest.needsAttention.first()
+                AppIconUtils.getAppIconBitmap(context, firstNotification.packageName, firstNotification.appName, iconSizePx)
+            }
+            // Try first conversation
+            digest.conversations.isNotEmpty() -> {
+                val firstConversation = digest.conversations.first()
+                AppIconUtils.getAppIconBitmap(context, firstConversation.appPackage, firstConversation.appName, iconSizePx)
+            }
+            // Try first app group
+            digest.appGroups.isNotEmpty() -> {
+                val firstAppGroup = digest.appGroups.first()
+                AppIconUtils.getAppIconBitmap(context, firstAppGroup.appPackage, firstAppGroup.appName, iconSizePx)
+            }
+            // Use app's own icon as fallback
+            else -> {
+                AppIconUtils.getAppIconBitmap(context, context.packageName, "Notifyr", iconSizePx)
+            }
+        }
+        
         val notificationBuilder = NotificationCompat.Builder(context, DIGEST_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_normal)
+            .setLargeIcon(appIconBitmap)
             .setContentTitle("Notification Digest")
             .setContentText(shortSummary)
             .setStyle(bigTextStyle)  // Use natural language style
