@@ -26,6 +26,7 @@ class SmartNotificationClassifier @Inject constructor(
         private const val TAG = "MLClassifier"
         private const val LEARNING_RATE = 0.01f
         private const val CONFIDENCE_THRESHOLD = 0.7f
+        private const val BATCH_TRAINING_THRESHOLD = 50 // Trigger batch training after 50 new samples
     }
     
     // Simple neural network weights (18 input features -> 1 output)
@@ -38,6 +39,7 @@ class SmartNotificationClassifier @Inject constructor(
     private var totalTrainingSamples = 0
     private var lastTrainingTime = 0L
     private var modelAccuracy = 0f
+    private var samplesSinceLastBatchTraining = 0 // Track samples since last batch training
     
     init {
         loadModelWeights()
@@ -112,10 +114,18 @@ class SmartNotificationClassifier @Inject constructor(
         trainingDataManager.addTrainingSample(notification, userImportance, conversationHistory)
         
         totalTrainingSamples++
+        samplesSinceLastBatchTraining++
         
         // Periodically save weights
         if (totalTrainingSamples % 10 == 0) {
             saveModelWeights()
+        }
+        
+        // Check if we should trigger automatic batch training
+        if (samplesSinceLastBatchTraining >= BATCH_TRAINING_THRESHOLD) {
+            Log.d(TAG, "Threshold reached ($samplesSinceLastBatchTraining samples), triggering automatic batch training")
+            samplesSinceLastBatchTraining = 0
+            batchTrain(epochs = 5)
         }
         
         Log.d(TAG, "Learned from feedback: ${notification.appName} -> $userImportance (error: ${(error * 100).toInt()}%)")
@@ -183,6 +193,7 @@ class SmartNotificationClassifier @Inject constructor(
         
         modelAccuracy = correctPredictions.toFloat() / (trainingSamples.size * epochs)
         lastTrainingTime = System.currentTimeMillis()
+        samplesSinceLastBatchTraining = 0 // Reset counter after batch training
         
         saveModelWeights()
         
@@ -212,6 +223,7 @@ class SmartNotificationClassifier @Inject constructor(
         totalTrainingSamples = 0
         lastTrainingTime = 0L
         modelAccuracy = 0f
+        samplesSinceLastBatchTraining = 0
         saveModelWeights()
         trainingDataManager.clearAllData()
     }
@@ -244,6 +256,7 @@ class SmartNotificationClassifier @Inject constructor(
             totalTrainingSamples = prefs.getInt("total_samples", 0)
             lastTrainingTime = prefs.getLong("last_training", 0L)
             modelAccuracy = prefs.getFloat("accuracy", 0f)
+            samplesSinceLastBatchTraining = prefs.getInt("samples_since_batch", 0)
             
             Log.d(TAG, "Loaded ML model with $totalTrainingSamples training samples")
         } catch (e: Exception) {
@@ -266,6 +279,7 @@ class SmartNotificationClassifier @Inject constructor(
             editor.putInt("total_samples", totalTrainingSamples)
             editor.putLong("last_training", lastTrainingTime)
             editor.putFloat("accuracy", modelAccuracy)
+            editor.putInt("samples_since_batch", samplesSinceLastBatchTraining)
             
             editor.apply()
             

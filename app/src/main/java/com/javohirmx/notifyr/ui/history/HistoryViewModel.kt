@@ -9,6 +9,7 @@ import com.javohirmx.notifyr.domain.model.NotificationImportance
 import com.javohirmx.notifyr.domain.model.NotificationItem
 import com.javohirmx.notifyr.domain.model.NotificationGroup
 import com.javohirmx.notifyr.domain.usecase.GroupNotificationsUseCase
+import com.javohirmx.notifyr.domain.ml.HybridNotificationClassifier
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -19,7 +20,8 @@ class HistoryViewModel @Inject constructor(
     application: Application,
     private val notificationRepository: NotificationRepository,
     private val groupNotificationsUseCase: GroupNotificationsUseCase,
-    private val appRulesRepository: com.javohirmx.notifyr.data.repository.AppRulesRepository
+    private val appRulesRepository: com.javohirmx.notifyr.data.repository.AppRulesRepository,
+    private val hybridClassifier: HybridNotificationClassifier
 ) : AndroidViewModel(application) {
     
     private val sharedPreferences = application.getSharedPreferences("notifyr_prefs", android.content.Context.MODE_PRIVATE)
@@ -301,6 +303,50 @@ class HistoryViewModel @Inject constructor(
     fun refreshData() {
         _uiState.value = _uiState.value.copy(isLoading = true)
         loadNotifications()
+    }
+    
+    /**
+     * Change notification importance and trigger ML learning
+     */
+    fun changeNotificationImportance(
+        notification: NotificationData,
+        newImportance: NotificationImportance
+    ) {
+        // Don't do anything if importance hasn't changed
+        if (notification.importance == newImportance) {
+            return
+        }
+        
+        viewModelScope.launch {
+            try {
+                // Update tags to match new importance
+                val newPriority = com.javohirmx.notifyr.domain.model.Priority.fromImportance(newImportance)
+                val newTimeSensitivity = when (newImportance) {
+                    NotificationImportance.URGENT -> com.javohirmx.notifyr.domain.model.TimeSensitivity.IMMEDIATE
+                    NotificationImportance.NORMAL -> com.javohirmx.notifyr.domain.model.TimeSensitivity.LATER
+                    NotificationImportance.IGNORE -> com.javohirmx.notifyr.domain.model.TimeSensitivity.WHENEVER
+                }
+                
+                val updatedTags = notification.tags.copy(
+                    priority = newPriority,
+                    timeSensitivity = newTimeSensitivity
+                )
+                
+                // Update notification in database with new importance and tags
+                val updatedNotification = notification.copy(
+                    importance = newImportance,
+                    tags = updatedTags
+                )
+                notificationRepository.updateNotification(updatedNotification)
+                
+                // Trigger ML learning from user correction
+                hybridClassifier.learnFromUserCorrection(notification, newImportance)
+                
+                // UI will automatically refresh via Flow collection
+            } catch (e: Exception) {
+                android.util.Log.e("HistoryViewModel", "Failed to change notification importance", e)
+            }
+        }
     }
 }
 

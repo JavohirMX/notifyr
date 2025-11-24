@@ -179,7 +179,8 @@ fun HistoryScreen(
                         onSetAppRule = { packageName, appName ->
                             selectedAppForRule = Pair(packageName, appName)
                             showAppRuleDialog = true
-                        }
+                        },
+                        onImportanceChange = viewModel::changeNotificationImportance
                     )
                     1 -> NotificationList(
                         notifications = uiState.normalNotifications,
@@ -193,7 +194,8 @@ fun HistoryScreen(
                         onSetAppRule = { packageName, appName ->
                             selectedAppForRule = Pair(packageName, appName)
                             showAppRuleDialog = true
-                        }
+                        },
+                        onImportanceChange = viewModel::changeNotificationImportance
                     )
                     2 -> NotificationList(
                         notifications = uiState.ignoredNotifications,
@@ -207,7 +209,8 @@ fun HistoryScreen(
                         onSetAppRule = { packageName, appName ->
                             selectedAppForRule = Pair(packageName, appName)
                             showAppRuleDialog = true
-                        }
+                        },
+                        onImportanceChange = viewModel::changeNotificationImportance
                     )
                 }
             }
@@ -307,7 +310,8 @@ fun NotificationList(
     isLoading: Boolean,
     onMarkGroupAsRead: (NotificationGroup) -> Unit = {},
     onDeleteGroup: (NotificationGroup) -> Unit = {},
-    onSetAppRule: ((String, String) -> Unit)? = null
+    onSetAppRule: ((String, String) -> Unit)? = null,
+    onImportanceChange: ((NotificationData, NotificationImportance) -> Unit)? = null
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         if (isLoading) {
@@ -430,7 +434,8 @@ fun NotificationList(
                                     notification = item.notification,
                                     onMarkAsRead = { onMarkAsRead(item.notification) },
                                     onDelete = { onDelete(item.notification) },
-                                    onSetAppRule = onSetAppRule
+                                    onSetAppRule = onSetAppRule,
+                                    onImportanceChange = onImportanceChange
                                 )
                             }
                             is NotificationItem.Group -> {
@@ -608,7 +613,7 @@ fun NotificationGroupCard(
                     contentPadding = PaddingValues(horizontal = 12.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.OpenInNew,
+                        imageVector = Icons.Default.ArrowForward,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
@@ -814,7 +819,8 @@ fun NotificationHistoryCard(
     notification: NotificationData,
     onMarkAsRead: () -> Unit,
     onDelete: () -> Unit,
-    onSetAppRule: ((String, String) -> Unit)? = null
+    onSetAppRule: ((String, String) -> Unit)? = null,
+    onImportanceChange: ((NotificationData, NotificationImportance) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val packageManager = context.packageManager
@@ -834,6 +840,7 @@ fun NotificationHistoryCard(
     }
     
     var showAppRuleMenu by remember { mutableStateOf(false) }
+    var showImportanceMenu by remember { mutableStateOf(false) }
     
     ElevatedCard(
         modifier = Modifier
@@ -1024,19 +1031,78 @@ fun NotificationHistoryCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // App rule button (left side)
-                if (onSetAppRule != null) {
-                    TextButton(
-                        onClick = { showAppRuleMenu = true },
-                        contentPadding = PaddingValues(horizontal = 12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("App Rule")
+                // App rule and importance buttons (left side)
+                Row {
+                    if (onSetAppRule != null) {
+                        TextButton(
+                            onClick = { showAppRuleMenu = true },
+                            contentPadding = PaddingValues(horizontal = 12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("App Rule")
+                        }
+                    }
+                    
+                    // Importance change button
+                    if (onImportanceChange != null) {
+                        if (onSetAppRule != null) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
+                        Box {
+                            TextButton(
+                                onClick = { showImportanceMenu = true },
+                                contentPadding = PaddingValues(horizontal = 12.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Change")
+                            }
+                            
+                            DropdownMenu(
+                                expanded = showImportanceMenu,
+                                onDismissRequest = { showImportanceMenu = false }
+                            ) {
+                                // Show options for all importance levels except current
+                                NotificationImportance.values().forEach { importance ->
+                                    if (importance != notification.importance) {
+                                        DropdownMenuItem(
+                                            text = { 
+                                                Text(
+                                                    when (importance) {
+                                                        NotificationImportance.URGENT -> "Mark as Urgent"
+                                                        NotificationImportance.NORMAL -> "Mark as Normal"
+                                                        NotificationImportance.IGNORE -> "Mark as Ignore"
+                                                    }
+                                                )
+                                            },
+                                            onClick = {
+                                                showImportanceMenu = false
+                                                onImportanceChange(notification, importance)
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = when (importance) {
+                                                        NotificationImportance.URGENT -> Icons.Default.Warning
+                                                        NotificationImportance.NORMAL -> Icons.Default.Notifications
+                                                        NotificationImportance.IGNORE -> Icons.Default.Close
+                                                    },
+                                                    contentDescription = null
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 
