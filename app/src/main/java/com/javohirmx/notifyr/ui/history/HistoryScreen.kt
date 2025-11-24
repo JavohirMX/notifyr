@@ -454,7 +454,7 @@ fun NotificationGroupCard(
             .fillMaxWidth()
             .animateContentSize(),
         elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = if (group.isAllRead) 0.dp else 3.dp
+            defaultElevation = 3.dp
         ),
         colors = CardDefaults.elevatedCardColors(
             containerColor = if (group.isAllRead) {
@@ -652,7 +652,7 @@ private fun GroupedNotificationItem(
             MaterialTheme.colorScheme.surface
         },
         shape = RoundedCornerShape(8.dp),
-        tonalElevation = if (notification.isRead) 0.dp else 1.dp
+        tonalElevation = 1.dp
     ) {
         Column(
             modifier = Modifier
@@ -794,7 +794,7 @@ fun NotificationHistoryCard(
             .fillMaxWidth()
             .animateContentSize(),
         elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = if (notification.isRead) 0.dp else 2.dp
+            defaultElevation = 2.dp
         ),
         colors = CardDefaults.elevatedCardColors(
             containerColor = if (notification.isRead) {
