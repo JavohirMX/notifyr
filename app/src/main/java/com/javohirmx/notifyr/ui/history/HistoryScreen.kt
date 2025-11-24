@@ -778,6 +778,10 @@ fun NotificationHistoryCard(
                 val launchIntent: Intent? = packageManager.getLaunchIntentForPackage(notification.packageName)
                 if (launchIntent != null) {
                     context.startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    // Mark notification as read when opening the app
+                    if (!notification.isRead) {
+                        onMarkAsRead()
+                    }
                 }
             } catch (_: Exception) { }
         }

@@ -123,6 +123,7 @@ fun DashboardScreen(
                     val context = LocalContext.current
                     NotificationCard(
                         notification = notification,
+                        onMarkAsRead = { viewModel.markAsRead(notification) },
                         leadingIcon = {
                             AppIconUtils.AppIconOrPlaceholder(
                                 context = context,
@@ -261,6 +262,7 @@ fun StatCard(
 @Composable
 fun NotificationCard(
     notification: NotificationData,
+    onMarkAsRead: () -> Unit = {},
     leadingIcon: (@Composable () -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -271,6 +273,10 @@ fun NotificationCard(
                 val launchIntent: Intent? = packageManager.getLaunchIntentForPackage(notification.packageName)
                 if (launchIntent != null) {
                     context.startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    // Mark notification as read when opening the app
+                    if (!notification.isRead) {
+                        onMarkAsRead()
+                    }
                 }
             } catch (_: Exception) { }
         }

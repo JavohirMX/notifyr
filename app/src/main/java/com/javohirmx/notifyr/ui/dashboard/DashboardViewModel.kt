@@ -74,6 +74,12 @@ class DashboardViewModel @Inject constructor(
         checkPermissions()
         loadDashboardData()
     }
+    
+    fun markAsRead(notification: NotificationData) {
+        viewModelScope.launch {
+            notificationRepository.markAsRead(notification.id, true)
+        }
+    }
 }
 
 data class DashboardUiState(
