@@ -3,11 +3,13 @@ package com.javohirmx.notifyr.ui.history
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.pager.HorizontalPager
@@ -42,6 +44,11 @@ import com.javohirmx.notifyr.domain.model.NotificationData
 import com.javohirmx.notifyr.domain.model.NotificationImportance
 import com.javohirmx.notifyr.domain.model.NotificationItem
 import com.javohirmx.notifyr.domain.model.NotificationGroup
+import com.javohirmx.notifyr.domain.model.NotificationTags
+import com.javohirmx.notifyr.domain.model.Priority
+import com.javohirmx.notifyr.domain.model.NotificationContext
+import com.javohirmx.notifyr.domain.model.TimeSensitivity
+import com.javohirmx.notifyr.domain.model.ActionType
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
@@ -180,7 +187,8 @@ fun HistoryScreen(
                             selectedAppForRule = Pair(packageName, appName)
                             showAppRuleDialog = true
                         },
-                        onImportanceChange = viewModel::changeNotificationImportance
+                        onImportanceChange = viewModel::changeNotificationImportance,
+                        onTagsChange = viewModel::updateNotificationTags
                     )
                     1 -> NotificationList(
                         notifications = uiState.normalNotifications,
@@ -195,7 +203,8 @@ fun HistoryScreen(
                             selectedAppForRule = Pair(packageName, appName)
                             showAppRuleDialog = true
                         },
-                        onImportanceChange = viewModel::changeNotificationImportance
+                        onImportanceChange = viewModel::changeNotificationImportance,
+                        onTagsChange = viewModel::updateNotificationTags
                     )
                     2 -> NotificationList(
                         notifications = uiState.ignoredNotifications,
@@ -210,7 +219,8 @@ fun HistoryScreen(
                             selectedAppForRule = Pair(packageName, appName)
                             showAppRuleDialog = true
                         },
-                        onImportanceChange = viewModel::changeNotificationImportance
+                        onImportanceChange = viewModel::changeNotificationImportance,
+                        onTagsChange = viewModel::updateNotificationTags
                     )
                 }
             }
@@ -311,7 +321,8 @@ fun NotificationList(
     onMarkGroupAsRead: (NotificationGroup) -> Unit = {},
     onDeleteGroup: (NotificationGroup) -> Unit = {},
     onSetAppRule: ((String, String) -> Unit)? = null,
-    onImportanceChange: ((NotificationData, NotificationImportance) -> Unit)? = null
+    onImportanceChange: ((NotificationData, NotificationImportance) -> Unit)? = null,
+    onTagsChange: ((NotificationData, NotificationTags) -> Unit)? = null
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         if (isLoading) {
@@ -435,7 +446,8 @@ fun NotificationList(
                                     onMarkAsRead = { onMarkAsRead(item.notification) },
                                     onDelete = { onDelete(item.notification) },
                                     onSetAppRule = onSetAppRule,
-                                    onImportanceChange = onImportanceChange
+                                    onImportanceChange = onImportanceChange,
+                                    onTagsChange = onTagsChange
                                 )
                             }
                             is NotificationItem.Group -> {
@@ -820,7 +832,8 @@ fun NotificationHistoryCard(
     onMarkAsRead: () -> Unit,
     onDelete: () -> Unit,
     onSetAppRule: ((String, String) -> Unit)? = null,
-    onImportanceChange: ((NotificationData, NotificationImportance) -> Unit)? = null
+    onImportanceChange: ((NotificationData, NotificationImportance) -> Unit)? = null,
+    onTagsChange: ((NotificationData, NotificationTags) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val packageManager = context.packageManager
@@ -841,6 +854,7 @@ fun NotificationHistoryCard(
     
     var showAppRuleMenu by remember { mutableStateOf(false) }
     var showImportanceMenu by remember { mutableStateOf(false) }
+    var showTagEditDialog by remember { mutableStateOf(false) }
     
     ElevatedCard(
         modifier = Modifier
@@ -1104,6 +1118,25 @@ fun NotificationHistoryCard(
                             }
                         }
                     }
+                    
+                    // Tag edit button
+                    if (onTagsChange != null) {
+                        if (onSetAppRule != null || onImportanceChange != null) {
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
+                        TextButton(
+                            onClick = { showTagEditDialog = true },
+                            contentPadding = PaddingValues(horizontal = 12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Tags")
+                        }
+                    }
                 }
                 
                 Spacer(modifier = Modifier.weight(1f))
@@ -1161,6 +1194,18 @@ fun NotificationHistoryCard(
                 }
             )
         }
+    }
+    
+    // Tag Edit Dialog
+    if (showTagEditDialog && onTagsChange != null) {
+        TagEditDialog(
+            notification = notification,
+            onDismiss = { showTagEditDialog = false },
+            onSave = { updatedTags ->
+                onTagsChange(notification, updatedTags)
+                showTagEditDialog = false
+            }
+        )
     }
 }
 
@@ -1248,4 +1293,192 @@ private fun formatTimestamp(timestamp: Long): String {
             dateFormat.format(java.util.Date(timestamp))
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun TagEditDialog(
+    notification: NotificationData,
+    onDismiss: () -> Unit,
+    onSave: (NotificationTags) -> Unit
+) {
+    var selectedPriority by remember { mutableStateOf(notification.tags.priority) }
+    var selectedContexts by remember { mutableStateOf(notification.tags.contexts.toMutableSet()) }
+    var selectedTimeSensitivity by remember { mutableStateOf(notification.tags.timeSensitivity) }
+    var selectedActionType by remember { mutableStateOf(notification.tags.actionType) }
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(
+                text = "Edit Tags",
+                style = MaterialTheme.typography.titleLarge
+            )
+        },
+        text = {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 600.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Priority Section
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Priority",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Priority.values().forEach { priority ->
+                                FilterChip(
+                                    selected = selectedPriority == priority,
+                                    onClick = { selectedPriority = priority },
+                                    label = {
+                                        Text(
+                                            when (priority) {
+                                                Priority.CRITICAL -> "Critical"
+                                                Priority.IMPORTANT -> "Important"
+                                                Priority.NORMAL -> "Normal"
+                                                Priority.LOW -> "Low"
+                                            },
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // Context Section
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Contexts",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            NotificationContext.values().forEach { context ->
+                                FilterChip(
+                                    selected = context in selectedContexts,
+                                    onClick = {
+                                        if (context in selectedContexts) {
+                                            selectedContexts.remove(context)
+                                        } else {
+                                            selectedContexts.add(context)
+                                        }
+                                    },
+                                    label = {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text(
+                                                text = getContextIcon(context),
+                                                style = MaterialTheme.typography.labelMedium
+                                            )
+                                            Text(
+                                                text = getContextDisplay(context),
+                                                style = MaterialTheme.typography.labelMedium
+                                            )
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // Time Sensitivity Section
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Time Sensitivity",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            TimeSensitivity.values().forEach { sensitivity ->
+                                FilterChip(
+                                    selected = selectedTimeSensitivity == sensitivity,
+                                    onClick = { selectedTimeSensitivity = sensitivity },
+                                    label = {
+                                        Text(
+                                            sensitivity.getDisplayName(),
+                                            style = MaterialTheme.typography.labelMedium
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                // Action Type Section
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Action Type",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            ActionType.values().forEach { actionType ->
+                                FilterChip(
+                                    selected = selectedActionType == actionType,
+                                    onClick = { selectedActionType = actionType },
+                                    label = {
+                                        Text(
+                                            actionType.getDisplayName(),
+                                            style = MaterialTheme.typography.labelSmall
+                                        )
+                                    },
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onSave(
+                        NotificationTags(
+                            priority = selectedPriority,
+                            contexts = selectedContexts,
+                            timeSensitivity = selectedTimeSensitivity,
+                            actionType = selectedActionType
+                        )
+                    )
+                }
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }

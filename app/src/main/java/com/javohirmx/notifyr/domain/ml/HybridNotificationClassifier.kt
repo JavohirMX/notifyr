@@ -116,6 +116,56 @@ class HybridNotificationClassifier @Inject constructor(
     }
     
     /**
+     * Learn from tag changes
+     * Called when user manually edits notification tags
+     */
+    suspend fun learnFromTagChanges(
+        notification: NotificationData,
+        newTags: com.javohirmx.notifyr.domain.model.NotificationTags
+    ) {
+        if (!mlEnabled) return
+        
+        try {
+            // Get conversation history
+            val conversationHistory = if (notification.conversationId != null) {
+                notificationRepository
+                    .getNotificationsByPackage(notification.packageName)
+                    .first()
+                    .filter { it.conversationId == notification.conversationId }
+                    .sortedByDescending { it.timestamp }
+                    .take(20)
+            } else {
+                emptyList()
+            }
+            
+            // Convert tag priority to importance for ML learning
+            // Tags provide more granular feedback than importance alone
+            val inferredImportance = when (newTags.priority) {
+                com.javohirmx.notifyr.domain.model.Priority.CRITICAL -> NotificationImportance.URGENT
+                com.javohirmx.notifyr.domain.model.Priority.IMPORTANT -> NotificationImportance.URGENT
+                com.javohirmx.notifyr.domain.model.Priority.NORMAL -> NotificationImportance.NORMAL
+                com.javohirmx.notifyr.domain.model.Priority.LOW -> NotificationImportance.IGNORE
+            }
+            
+            // Create updated notification with new tags for learning
+            val updatedNotification = notification.copy(tags = newTags)
+            
+            // Let ML model learn from tag changes
+            // This provides richer feedback than importance changes alone
+            mlClassifier.learnFromTagFeedback(
+                updatedNotification,
+                inferredImportance,
+                newTags,
+                conversationHistory
+            )
+            
+            Log.d(TAG, "Learned from tags: ${notification.appName} -> Priority=${newTags.priority}, Contexts=${newTags.contexts.size}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to learn from tag changes", e)
+        }
+    }
+    
+    /**
      * Trigger batch training
      */
     suspend fun trainModel(epochs: Int = 5) {

@@ -132,6 +132,73 @@ class SmartNotificationClassifier @Inject constructor(
     }
     
     /**
+     * Learn from tag feedback
+     * Called when user manually edits notification tags
+     * Tags provide richer feedback than importance changes alone
+     */
+    suspend fun learnFromTagFeedback(
+        notification: NotificationData,
+        inferredImportance: NotificationImportance,
+        tags: com.javohirmx.notifyr.domain.model.NotificationTags,
+        conversationHistory: List<NotificationData> = emptyList()
+    ) = withContext(Dispatchers.Default) {
+        
+        // Extract features from notification with updated tags
+        val features = featureExtractor.extractFeatures(notification, conversationHistory)
+        
+        // Convert tag-based importance to target value
+        // Tags provide more nuanced feedback:
+        // - Priority.CRITICAL/IMPORTANT -> URGENT (1.0)
+        // - Priority.NORMAL -> NORMAL (0.5)
+        // - Priority.LOW -> IGNORE (0.0)
+        val target = when (inferredImportance) {
+            NotificationImportance.URGENT -> {
+                // If critical priority, weight it higher
+                if (tags.priority == com.javohirmx.notifyr.domain.model.Priority.CRITICAL) {
+                    1.0f
+                } else {
+                    0.85f // Important but not critical
+                }
+            }
+            NotificationImportance.NORMAL -> 0.5f
+            NotificationImportance.IGNORE -> 0.0f
+        }
+        
+        // Perform one gradient descent step
+        val prediction = sigmoid(computeLogit(features))
+        val error = target - prediction
+        
+        // Update weights with tag-enhanced learning
+        // Tag changes provide more specific feedback, so we can use a slightly higher learning rate
+        val tagLearningRate = LEARNING_RATE * 1.2f
+        
+        for (i in features.indices) {
+            weights[i] += tagLearningRate * error * features[i]
+        }
+        bias += tagLearningRate * error
+        
+        // Save training sample with tag information for later batch training
+        trainingDataManager.addTrainingSample(notification, inferredImportance, conversationHistory)
+        
+        totalTrainingSamples++
+        samplesSinceLastBatchTraining++
+        
+        // Periodically save weights
+        if (totalTrainingSamples % 10 == 0) {
+            saveModelWeights()
+        }
+        
+        // Check if we should trigger automatic batch training
+        if (samplesSinceLastBatchTraining >= BATCH_TRAINING_THRESHOLD) {
+            Log.d(TAG, "Threshold reached ($samplesSinceLastBatchTraining samples), triggering automatic batch training")
+            samplesSinceLastBatchTraining = 0
+            batchTrain(epochs = 5)
+        }
+        
+        Log.d(TAG, "Learned from tags: ${notification.appName} -> Priority=${tags.priority}, Importance=$inferredImportance (error: ${(error * 100).toInt()}%)")
+    }
+    
+    /**
      * Batch train on collected data
      * Should be called periodically (e.g., daily) or when enough samples are collected
      */

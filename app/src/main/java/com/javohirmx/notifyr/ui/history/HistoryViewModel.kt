@@ -348,6 +348,34 @@ class HistoryViewModel @Inject constructor(
             }
         }
     }
+    
+    /**
+     * Update notification tags and trigger ML learning
+     */
+    fun updateNotificationTags(
+        notification: NotificationData,
+        newTags: com.javohirmx.notifyr.domain.model.NotificationTags
+    ) {
+        // Don't do anything if tags haven't changed
+        if (notification.tags == newTags) {
+            return
+        }
+        
+        viewModelScope.launch {
+            try {
+                // Update notification in database with new tags
+                val updatedNotification = notification.copy(tags = newTags)
+                notificationRepository.updateNotification(updatedNotification)
+                
+                // Trigger ML learning from tag changes
+                hybridClassifier.learnFromTagChanges(notification, newTags)
+                
+                // UI will automatically refresh via Flow collection
+            } catch (e: Exception) {
+                android.util.Log.e("HistoryViewModel", "Failed to update notification tags", e)
+            }
+        }
+    }
 }
 
 data class HistoryUiState(
