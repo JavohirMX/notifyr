@@ -276,13 +276,13 @@ fun AppRuleCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     
-                    Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
                     
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()
-                    ) {
+                        ) {
                         // Temporary status badge
                         temporaryStatus?.let { tempStatus ->
                             if (!tempStatus.isExpired()) {
@@ -334,11 +334,11 @@ fun AppRuleCard(
                                 )
                             }
                         } else if (temporaryStatus == null || temporaryStatus.isExpired()) {
-                            Text(
-                                text = "No rule set",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        Text(
+                            text = "No rule set",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         }
                     }
                 }

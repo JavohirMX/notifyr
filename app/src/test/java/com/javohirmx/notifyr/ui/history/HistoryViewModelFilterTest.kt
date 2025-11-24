@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import com.google.common.truth.Truth.assertThat
 import com.javohirmx.notifyr.data.repository.NotificationRepository
+import com.javohirmx.notifyr.domain.ml.HybridNotificationClassifier
 import com.javohirmx.notifyr.domain.model.NotificationContext
 import com.javohirmx.notifyr.domain.model.NotificationData
 import com.javohirmx.notifyr.domain.model.NotificationImportance
@@ -31,6 +32,7 @@ class HistoryViewModelFilterTest {
     private lateinit var notificationRepository: NotificationRepository
     private lateinit var groupNotificationsUseCase: GroupNotificationsUseCase
     private lateinit var appRulesRepository: com.javohirmx.notifyr.data.repository.AppRulesRepository
+    private lateinit var hybridClassifier: HybridNotificationClassifier
     private lateinit var viewModel: HistoryViewModel
     
     @Before
@@ -41,6 +43,17 @@ class HistoryViewModelFilterTest {
         notificationRepository = mock()
         appRulesRepository = mock()
         groupNotificationsUseCase = GroupNotificationsUseCase()
+        hybridClassifier = mock()
+        
+        // Setup Application mock for SharedPreferences
+        val sharedPreferences = android.content.Context.MODE_PRIVATE
+        val mockSharedPreferences = mock<android.content.SharedPreferences>()
+        val mockEditor = mock<android.content.SharedPreferences.Editor>()
+        whenever(mockEditor.putInt(org.mockito.kotlin.any(), org.mockito.kotlin.any())).thenReturn(mockEditor)
+        whenever(mockEditor.apply()).then {}
+        whenever(mockSharedPreferences.getInt(org.mockito.kotlin.any(), org.mockito.kotlin.any())).thenReturn(0)
+        whenever(mockSharedPreferences.edit()).thenReturn(mockEditor)
+        whenever(application.getSharedPreferences(org.mockito.kotlin.any(), org.mockito.kotlin.any())).thenReturn(mockSharedPreferences)
         
         // Setup default repository responses
         whenever(notificationRepository.getNotificationsByImportance(NotificationImportance.URGENT))
@@ -54,7 +67,8 @@ class HistoryViewModelFilterTest {
             application,
             notificationRepository,
             groupNotificationsUseCase,
-            appRulesRepository
+            appRulesRepository,
+            hybridClassifier
         )
     }
     

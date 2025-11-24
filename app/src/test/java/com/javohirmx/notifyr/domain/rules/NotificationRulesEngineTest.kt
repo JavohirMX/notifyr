@@ -3,7 +3,9 @@ package com.javohirmx.notifyr.domain.rules
 import com.google.common.truth.Truth.assertThat
 import com.javohirmx.notifyr.data.repository.AppRulesRepository
 import com.javohirmx.notifyr.data.repository.KeywordRulesRepository
+import com.javohirmx.notifyr.data.repository.TemporaryAppStatusRepository
 import com.javohirmx.notifyr.domain.model.*
+import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
 
@@ -11,10 +13,11 @@ class NotificationRulesEngineTest {
     
     private lateinit var appRulesRepository: AppRulesRepository
     private lateinit var keywordRulesRepository: KeywordRulesRepository
+    private lateinit var temporaryAppStatusRepository: TemporaryAppStatusRepository
     private lateinit var rulesEngine: NotificationRulesEngine
     
     @Before
-    fun setup() {
+    fun setup() = runTest {
         // Create an in-memory DataStore for testing
         val dataStore = androidx.datastore.core.DataStoreFactory.create(
             serializer = com.javohirmx.notifyr.data.datastore.SettingsSerializer,
@@ -24,12 +27,20 @@ class NotificationRulesEngineTest {
         // Use real repositories for testing since they have in-memory state
         appRulesRepository = AppRulesRepository(dataStore)
         keywordRulesRepository = KeywordRulesRepository()
+        temporaryAppStatusRepository = TemporaryAppStatusRepository(dataStore)
+        
+        // Wait for repositories to initialize
+        var attempts = 0
+        while (appRulesRepository.appRules.value.isEmpty() && attempts < 50) {
+            kotlinx.coroutines.delay(10)
+            attempts++
+        }
         
         // Clear all rules to start with clean state
         appRulesRepository.clearAllRules()
         keywordRulesRepository.clearAllKeywords()
         
-        rulesEngine = NotificationRulesEngine(appRulesRepository, keywordRulesRepository)
+        rulesEngine = NotificationRulesEngine(appRulesRepository, keywordRulesRepository, temporaryAppStatusRepository)
     }
     
     @Test

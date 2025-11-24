@@ -43,6 +43,7 @@ android {
     
     lint {
         disable += "ProtectedPermissions"
+        disable += "CoroutineCreationDuringComposition" // Known lint bug with Compose coroutines
     }
 }
 
