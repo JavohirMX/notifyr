@@ -94,6 +94,19 @@ fun HistoryScreen(
             val pagerState = rememberPagerState(pageCount = { 3 })
             val scope = rememberCoroutineScope()
             
+            // Restore last selected tab on first load
+            LaunchedEffect(Unit) {
+                val savedTab = uiState.selectedTab.coerceIn(0, 2)
+                if (pagerState.currentPage != savedTab) {
+                    pagerState.animateScrollToPage(savedTab)
+                }
+            }
+            
+            // Save tab when it changes
+            LaunchedEffect(pagerState.currentPage) {
+                viewModel.saveSelectedTab(pagerState.currentPage)
+            }
+            
             val tabs = listOf(
                 TabData("Urgent", uiState.urgentNotifications.size, Icons.Default.Warning),
                 TabData("Normal", uiState.normalNotifications.size, Icons.Default.Notifications),

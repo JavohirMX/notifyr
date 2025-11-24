@@ -40,21 +40,42 @@ fun NotifyrApp() {
     val navController = rememberNavController()
     var startDestination by remember { mutableStateOf<String?>(null) }
     
-    // Check onboarding status
+    // Check onboarding status and restore last route
     LaunchedEffect(Unit) {
         val sharedPreferences = navController.context.getSharedPreferences("notifyr_prefs", android.content.Context.MODE_PRIVATE)
         val isOnboardingCompleted = sharedPreferences.getBoolean("onboarding_completed", false)
+        
         startDestination = if (isOnboardingCompleted) {
-            Screen.Dashboard.route
+            // Restore last opened route, or default to Dashboard
+            sharedPreferences.getString("last_route", Screen.Dashboard.route) ?: Screen.Dashboard.route
         } else {
             Screen.Onboarding.route
         }
     }
     
+    // Save current route whenever navigation changes
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    
+    LaunchedEffect(currentRoute) {
+        currentRoute?.let { route ->
+            // Don't save onboarding route or nested routes (like app_rules, etc.)
+            // Only save main bottom navigation routes
+            val mainRoutes = setOf(
+                Screen.Dashboard.route,
+                Screen.History.route,
+                Screen.Settings.route
+            )
+            
+            if (route in mainRoutes) {
+                val sharedPreferences = navController.context.getSharedPreferences("notifyr_prefs", android.content.Context.MODE_PRIVATE)
+                sharedPreferences.edit().putString("last_route", route).apply()
+            }
+        }
+    }
+    
     startDestination?.let { destination ->
-        val navBackStackEntry by navController.currentBackStackEntryAsState()
-        val currentRoute = navBackStackEntry?.destination?.route ?: destination
-        val isOnboarding = currentRoute == Screen.Onboarding.route
+        val isOnboarding = currentRoute == Screen.Onboarding.route || destination == Screen.Onboarding.route
         
         if (isOnboarding) {
             // Show onboarding without bottom navigation

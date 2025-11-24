@@ -22,6 +22,8 @@ class HistoryViewModel @Inject constructor(
     private val appRulesRepository: com.javohirmx.notifyr.data.repository.AppRulesRepository
 ) : AndroidViewModel(application) {
     
+    private val sharedPreferences = application.getSharedPreferences("notifyr_prefs", android.content.Context.MODE_PRIVATE)
+    
     private val _uiState = MutableStateFlow(HistoryUiState())
     val uiState: StateFlow<HistoryUiState> = _uiState.asStateFlow()
     
@@ -32,7 +34,15 @@ class HistoryViewModel @Inject constructor(
     val filterState: StateFlow<FilterState> = _filterState.asStateFlow()
     
     init {
+        // Restore last selected tab
+        val lastTab = sharedPreferences.getInt("history_last_tab", 0)
+        _uiState.value = _uiState.value.copy(selectedTab = lastTab.coerceIn(0, 2))
         loadNotifications()
+    }
+    
+    fun saveSelectedTab(tabIndex: Int) {
+        sharedPreferences.edit().putInt("history_last_tab", tabIndex.coerceIn(0, 2)).apply()
+        _uiState.value = _uiState.value.copy(selectedTab = tabIndex.coerceIn(0, 2))
     }
     
     private fun loadNotifications() {
