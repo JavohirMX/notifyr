@@ -51,6 +51,7 @@ fun OnboardingScreen(
 
     val requestPostNotifications = if (android.os.Build.VERSION.SDK_INT >= 33) {
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
+            // Permission check will trigger auto-advance via LaunchedEffect
             viewModel.checkPermissions()
         }
     } else null
@@ -83,23 +84,26 @@ fun OnboardingScreen(
                 icon = Icons.Default.Lock
             ),
             OnboardingPage(
-                title = "Enable Notification Access",
-                description = "To start filtering, Notifyr needs permission to read your notifications. This is required for the app to work.",
-                icon = Icons.Default.Settings,
-                actionText = if (uiState.isNotificationListenerEnabled) "Permission Granted ✓" else "Grant Permission",
-                action = if (!uiState.isNotificationListenerEnabled) {
-                    { PermissionUtils.openNotificationListenerSettings(context) }
-                } else null
-            ),
-            OnboardingPage(
                 title = "Allow App Notifications",
-                description = "Allow Notifyr to post important notifications to you (Android 13+).",
+                description = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    "Allow Notifyr to post important notifications to you. This helps you stay informed about filtered notifications."
+                } else {
+                    "Make sure notifications are enabled for Notifyr in your device settings."
+                },
                 icon = Icons.Default.Notifications,
                 actionText = if (uiState.hasPostNotificationsPermission && uiState.areNotificationsEnabledGlobally) "Allowed ✓" else "Allow",
                 action = {
                     if (android.os.Build.VERSION.SDK_INT >= 33) {
                         // Request POST_NOTIFICATIONS at runtime
-                        requestPostNotifications?.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        if (!uiState.hasPostNotificationsPermission) {
+                            requestPostNotifications?.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else if (!uiState.areNotificationsEnabledGlobally) {
+                            // Open settings if permission granted but notifications disabled globally
+                            context.startActivity(android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            })
+                        }
                     } else {
                         // Older versions: open app notification settings if disabled
                         if (!uiState.areNotificationsEnabledGlobally) {
@@ -110,35 +114,120 @@ fun OnboardingScreen(
                         }
                     }
                 }
+            ),
+            OnboardingPage(
+                title = "Enable Notification Access",
+                description = "To start filtering, Notifyr needs permission to read your notifications. Tap the button below to open settings and enable it.",
+                icon = Icons.Default.Settings,
+                actionText = if (uiState.isNotificationListenerEnabled) "Permission Granted ✓" else "Grant Permission",
+                action = if (!uiState.isNotificationListenerEnabled) {
+                    { PermissionUtils.openNotificationListenerSettings(context) }
+                } else null
             )
         )
     }
     
     val pagerState = rememberPagerState(pageCount = { pages.size })
+    
+    // Determine if critical permissions are granted
+    val hasCriticalPermissions = remember(uiState.isNotificationListenerEnabled, uiState.hasPostNotificationsPermission, uiState.areNotificationsEnabledGlobally) {
+        val hasPostNotif = if (android.os.Build.VERSION.SDK_INT >= 33) {
+            uiState.hasPostNotificationsPermission && uiState.areNotificationsEnabledGlobally
+        } else {
+            uiState.areNotificationsEnabledGlobally
+        }
+        uiState.isNotificationListenerEnabled && hasPostNotif
+    }
 
+    // Check permissions on start
     LaunchedEffect(Unit) {
         viewModel.checkPermissions()
+    }
+    
+    // Monitor permission status when user might return from settings
+    LaunchedEffect(pagerState.currentPage, uiState.isNotificationListenerEnabled, uiState.hasPostNotificationsPermission, uiState.areNotificationsEnabledGlobally) {
+        val currentPageIndex = pagerState.currentPage
+        val currentPage = pages.getOrNull(currentPageIndex)
+        
+        if (currentPage?.action != null) {
+            // This is a permission page, check if permission was granted
+            val isPostNotifPage = currentPage.title == "Allow App Notifications"
+            val isListenerPage = currentPage.title == "Enable Notification Access"
+            
+            if (isPostNotifPage) {
+                val hasPermission = if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    uiState.hasPostNotificationsPermission && uiState.areNotificationsEnabledGlobally
+                } else {
+                    uiState.areNotificationsEnabledGlobally
+                }
+                
+                if (hasPermission && currentPageIndex < pages.size - 1) {
+                    kotlinx.coroutines.delay(800)
+                    scope.launch {
+                        pagerState.animateScrollToPage(currentPageIndex + 1)
+                    }
+                }
+            } else if (isListenerPage && uiState.isNotificationListenerEnabled && currentPageIndex < pages.size - 1) {
+                kotlinx.coroutines.delay(800)
+                scope.launch {
+                    pagerState.animateScrollToPage(currentPageIndex + 1)
+                }
+            }
+        }
+    }
+    
+    // Auto-request POST_NOTIFICATIONS when reaching that page (Android 13+)
+    LaunchedEffect(pagerState.currentPage) {
+        val currentPage = pages.getOrNull(pagerState.currentPage)
+        if (currentPage?.title == "Allow App Notifications" && 
+            android.os.Build.VERSION.SDK_INT >= 33 && 
+            !uiState.hasPostNotificationsPermission &&
+            requestPostNotifications != null) {
+            // Small delay to let the page render
+            kotlinx.coroutines.delay(500)
+            requestPostNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+    
+    // Periodically check permissions when on permission pages (for when user returns from settings)
+    LaunchedEffect(pagerState.currentPage) {
+        val currentPageIndex = pagerState.currentPage
+        val currentPage = pages.getOrNull(currentPageIndex)
+        if (currentPage?.action != null) {
+            // Check permissions every second when on permission pages
+            var shouldContinue = true
+            while (shouldContinue && pagerState.currentPage == currentPageIndex) {
+                kotlinx.coroutines.delay(1000)
+                viewModel.checkPermissions()
+                // Check if we should stop (page changed or permission granted)
+                if (pagerState.currentPage != currentPageIndex) {
+                    shouldContinue = false
+                }
+            }
+        }
     }
     
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Skip button
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(
-                onClick = { 
-                    viewModel.completeOnboarding()
-                    navController.navigate(Screen.Dashboard.route) {
-                        popUpTo(Screen.Onboarding.route) { inclusive = true }
-                    }
-                }
+        // Skip button - only show if critical permissions are granted
+        if (hasCriticalPermissions) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.End
             ) {
-                Text("Skip")
+                TextButton(
+                    onClick = { 
+                        viewModel.completeOnboarding()
+                        navController.navigate(Screen.Dashboard.route) {
+                            popUpTo(Screen.Onboarding.route) { inclusive = true }
+                        }
+                    }
+                ) {
+                    Text("Skip")
+                }
             }
         }
         
@@ -147,9 +236,22 @@ fun OnboardingScreen(
             state = pagerState,
             modifier = Modifier.weight(1f)
         ) { page ->
+            val currentPage = pages[page]
+            val isPermissionEnabled = when (currentPage.title) {
+                "Enable Notification Access" -> uiState.isNotificationListenerEnabled
+                "Allow App Notifications" -> {
+                    if (android.os.Build.VERSION.SDK_INT >= 33) {
+                        uiState.hasPostNotificationsPermission && uiState.areNotificationsEnabledGlobally
+                    } else {
+                        uiState.areNotificationsEnabledGlobally
+                    }
+                }
+                else -> false
+            }
+            
             OnboardingPageContent(
-                page = pages[page],
-                isPermissionEnabled = uiState.isNotificationListenerEnabled,
+                page = currentPage,
+                isPermissionEnabled = isPermissionEnabled,
                 onPermissionCheck = { viewModel.checkPermissions() }
             )
         }
@@ -223,10 +325,20 @@ fun OnboardingScreen(
                                 pagerState.animateScrollToPage(pagerState.currentPage + 1)
                             }
                         }
+                    },
+                    enabled = if (pagerState.currentPage == pages.size - 1) {
+                        // Only allow finishing if critical permissions are granted
+                        hasCriticalPermissions
+                    } else {
+                        true
                     }
                 ) {
                     Text(
-                        if (pagerState.currentPage == pages.size - 1) "Get Started" else "Next"
+                        if (pagerState.currentPage == pages.size - 1) {
+                            if (hasCriticalPermissions) "Get Started" else "Grant Permissions First"
+                        } else {
+                            "Next"
+                        }
                     )
                     if (pagerState.currentPage < pages.size - 1) {
                         Spacer(modifier = Modifier.width(8.dp))
