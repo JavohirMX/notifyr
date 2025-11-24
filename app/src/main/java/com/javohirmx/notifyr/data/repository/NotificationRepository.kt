@@ -54,14 +54,53 @@ class NotificationRepository(
         notificationDao.updateNotification(notification.toEntity())
     }
 
+    /**
+     * Normalizes text for duplicate comparison by trimming whitespace
+     * and handling empty/null strings consistently
+     */
+    private fun normalizeText(text: String?): String {
+        return text?.trim()?.takeIf { it.isNotEmpty() } ?: ""
+    }
+
+    /**
+     * Checks if two notifications are considered duplicates
+     * by comparing normalized packageName, title, and text
+     */
+    private fun areDuplicates(notification1: NotificationData, notification2: NotificationData): Boolean {
+        return notification1.packageName == notification2.packageName &&
+                normalizeText(notification1.title) == normalizeText(notification2.title) &&
+                normalizeText(notification1.text) == normalizeText(notification2.text)
+    }
+
     suspend fun findRecentDuplicate(
         packageName: String,
         title: String,
         text: String,
         since: Long
     ): NotificationData? {
-        val entity = notificationDao.findRecentDuplicate(packageName, title, text, since)
-        return entity?.toDomain()
+        // First try exact match (fast path)
+        val exactMatch = notificationDao.findRecentDuplicate(packageName, title, text, since)
+        if (exactMatch != null) {
+            return exactMatch.toDomain()
+        }
+        
+        // If no exact match, check for normalized matches within the same package
+        // This handles cases where there might be whitespace differences
+        val normalizedTitle = normalizeText(title)
+        val normalizedText = normalizeText(text)
+        
+        if (normalizedTitle.isEmpty() && normalizedText.isEmpty()) {
+            // Both empty, skip fuzzy matching
+            return null
+        }
+        
+        val recentNotifications = notificationDao.findRecentNotificationsByPackage(packageName, since)
+        return recentNotifications
+            .map { it.toDomain() }
+            .firstOrNull { existing ->
+                normalizeText(existing.title) == normalizedTitle &&
+                normalizeText(existing.text) == normalizedText
+            }
     }
 
     suspend fun updateTimestamp(id: Long, timestamp: Long) {
@@ -70,7 +109,9 @@ class NotificationRepository(
 
     suspend fun upsertWithDedup(notification: NotificationData, windowMs: Long): Long {
         if (windowMs <= 0L) {
-            return insertNotification(notification)
+            // For zero or negative window, use a default window of 30 seconds
+            // to prevent immediate duplicates
+            return upsertWithDedup(notification, 30_000L)
         }
         val cutoff = System.currentTimeMillis() - windowMs
         val dup = findRecentDuplicate(
@@ -125,6 +166,19 @@ class NotificationRepository(
     }
     
     suspend fun importNotifications(notifications: List<NotificationData>) {
-        notificationDao.insertNotifications(notifications.map { it.toEntity() })
+        // Deduplicate notifications before importing to prevent duplicates
+        val deduplicated = mutableListOf<NotificationData>()
+        val seen = mutableSetOf<String>()
+        
+        for (notification in notifications) {
+            // Create a key for duplicate detection
+            val key = "${notification.packageName}|${normalizeText(notification.title)}|${normalizeText(notification.text)}"
+            if (!seen.contains(key)) {
+                seen.add(key)
+                deduplicated.add(notification)
+            }
+        }
+        
+        notificationDao.insertNotifications(deduplicated.map { it.toEntity() })
     }
 }

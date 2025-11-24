@@ -17,6 +17,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.any
+import org.mockito.kotlin.never
 
 class NotificationRepositoryTest {
     
@@ -269,6 +270,7 @@ class NotificationRepositoryTest {
             isRead = false
         )
         whenever(notificationDao.findRecentDuplicate(any(), any(), any(), any())).thenReturn(null)
+        whenever(notificationDao.findRecentNotificationsByPackage(any(), any())).thenReturn(emptyList())
         whenever(notificationDao.insertNotification(notification.toEntity())).thenReturn(42L)
         
         // When
@@ -314,6 +316,86 @@ class NotificationRepositoryTest {
         // Then
         assertThat(id).isEqualTo(existing.id)
         verify(notificationDao).updateTimestamp(existing.id, now)
+        // Should not call insertNotification when duplicate is found
+        verify(notificationDao, never()).insertNotification(any())
+    }
+    
+    @Test
+    fun `upsertWithDedup uses default window when windowMs is zero`() = runTest {
+        // Given
+        val notification = createTestNotification()
+        whenever(notificationDao.findRecentDuplicate(any(), any(), any(), any())).thenReturn(null)
+        whenever(notificationDao.findRecentNotificationsByPackage(any(), any())).thenReturn(emptyList())
+        whenever(notificationDao.insertNotification(notification.toEntity())).thenReturn(42L)
+        
+        // When
+        val id = repository.upsertWithDedup(notification, 0)
+        
+        // Then - should use default 30 second window
+        verify(notificationDao).findRecentDuplicate(any(), any(), any(), any())
+        assertThat(id).isEqualTo(42L)
+    }
+    
+    @Test
+    fun `upsertWithDedup handles normalized text matching`() = runTest {
+        // Given
+        val now = System.currentTimeMillis()
+        val existing = NotificationEntity(
+            id = 5,
+            packageName = "com.example.app",
+            appName = "Example",
+            title = "  Test Title  ",  // Has whitespace
+            text = "Test Text",
+            category = null,
+            importance = NotificationImportance.NORMAL.value,
+            timestamp = now - 5_000,
+            isRead = false
+        )
+        
+        // Exact match returns null, but normalized match should find it
+        whenever(notificationDao.findRecentDuplicate(any(), any(), any(), any())).thenReturn(null)
+        whenever(notificationDao.findRecentNotificationsByPackage(any(), any()))
+            .thenReturn(listOf(existing))
+        
+        val newData = NotificationData(
+            id = 0,
+            packageName = existing.packageName,
+            appName = existing.appName,
+            title = "Test Title",  // No whitespace - should match normalized
+            text = existing.text,
+            category = existing.category,
+            importance = NotificationImportance.NORMAL,
+            timestamp = now,
+            isRead = false
+        )
+        
+        // When
+        val id = repository.upsertWithDedup(newData, 15_000)
+        
+        // Then - should find duplicate via normalized matching
+        assertThat(id).isEqualTo(existing.id)
+        verify(notificationDao).updateTimestamp(existing.id, now)
+    }
+    
+    @Test
+    fun `importNotifications should deduplicate notifications`() = runTest {
+        // Given
+        val notifications = listOf(
+            createTestNotification(id = 1, title = "Test 1", text = "Text 1"),
+            createTestNotification(id = 2, title = "Test 1", text = "Text 1"),  // Duplicate
+            createTestNotification(id = 3, title = "Test 2", text = "Text 2"),
+            createTestNotification(id = 4, title = "  Test 2  ", text = "  Text 2  ")  // Duplicate with whitespace
+        )
+        
+        // When
+        repository.importNotifications(notifications)
+        
+        // Then - should only insert 2 unique notifications (after deduplication)
+        verify(notificationDao).insertNotifications(org.mockito.kotlin.argThat { list ->
+            list.size == 2 && 
+            list.any { it.title.trim() == "Test 1" } &&
+            list.any { it.title.trim() == "Test 2" }
+        })
     }
     
     private fun createTestEntity(

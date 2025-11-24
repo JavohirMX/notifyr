@@ -151,7 +151,7 @@ class NotificationListenerService : NotificationListenerService() {
                 timestamp = sbn.postTime
             )
             serviceScope.launch {
-                notificationRepository.upsertWithDedup(notificationData, 3_000L)
+                notificationRepository.upsertWithDedup(notificationData, 30_000L)
             }
             return // Don't process further - let original notification through
         }
@@ -195,11 +195,11 @@ class NotificationListenerService : NotificationListenerService() {
         val currentFocusMode = focusModeManager.getCurrentMode()
         val allowedByFocusMode = focusModeManager.shouldShowNotification(enhancedNotification, currentFocusMode)
         
-        // Deduplication window
+        // Deduplication window - increased for normal notifications to catch more duplicates
         val dedupWindowMs = when {
             isCall -> 15_000L
             isOngoing || isMedia -> 60_000L
-            else -> 3_000L
+            else -> 30_000L  // Increased from 3 seconds to 30 seconds for better duplicate detection
         }
         
         // Store with deduplication
