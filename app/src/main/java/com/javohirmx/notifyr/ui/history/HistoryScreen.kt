@@ -447,7 +447,23 @@ fun NotificationGroupCard(
     onDeleteSingle: (NotificationData) -> Unit
 ) {
     val context = LocalContext.current
+    val packageManager = context.packageManager
     var isExpanded by remember { mutableStateOf(false) }
+    
+    val onOpenApp = remember(group.packageName) {
+        {
+            try {
+                val launchIntent: Intent? = packageManager.getLaunchIntentForPackage(group.packageName)
+                if (launchIntent != null) {
+                    context.startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    // Mark all notifications in group as read when opening the app
+                    if (!group.isAllRead) {
+                        onMarkAllAsRead()
+                    }
+                }
+            } catch (_: Exception) { }
+        }
+    }
     
     ElevatedCard(
         modifier = Modifier
@@ -570,39 +586,56 @@ fun NotificationGroupCard(
             
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (!group.isAllRead) {
-                    TextButton(
-                        onClick = onMarkAllAsRead,
-                        contentPadding = PaddingValues(horizontal = 12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Mark all read")
-                    }
-                    Spacer(modifier = Modifier.width(4.dp))
-                }
-                
+                // Open App button (left side)
                 TextButton(
-                    onClick = onDeleteAll,
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
+                    onClick = onOpenApp,
+                    contentPadding = PaddingValues(horizontal = 12.dp)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Delete,
+                        imageVector = Icons.Default.OpenInNew,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Delete all")
+                    Text("Open App")
+                }
+                
+                // Mark read and delete buttons (right side)
+                Row {
+                    if (!group.isAllRead) {
+                        TextButton(
+                            onClick = onMarkAllAsRead,
+                            contentPadding = PaddingValues(horizontal = 12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Mark all read")
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    
+                    TextButton(
+                        onClick = onDeleteAll,
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Delete all")
+                    }
                 }
             }
             
