@@ -624,51 +624,39 @@ fun NotificationGroupCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Open App button (left side)
-                TextButton(
-                    onClick = onOpenApp,
-                    contentPadding = PaddingValues(horizontal = 12.dp)
+                IconButton(
+                    onClick = onOpenApp
                 ) {
                     Icon(
                         imageVector = Icons.Default.ArrowForward,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
+                        contentDescription = "Open App",
+                        modifier = Modifier.size(20.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Open App")
                 }
                 
                 // Mark read and delete buttons (right side)
                 Row {
                     if (!group.isAllRead) {
-                        TextButton(
-                            onClick = onMarkAllAsRead,
-                            contentPadding = PaddingValues(horizontal = 12.dp)
+                        IconButton(
+                            onClick = onMarkAllAsRead
                         ) {
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
+                                contentDescription = "Mark all read",
+                                modifier = Modifier.size(20.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Mark all read")
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
                     }
                     
-                    TextButton(
-                        onClick = onDeleteAll,
-                        contentPadding = PaddingValues(horizontal = 12.dp),
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        )
+                    IconButton(
+                        onClick = onDeleteAll
                     ) {
                         Icon(
                             imageVector = Icons.Default.Delete,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            contentDescription = "Delete all",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.error
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Delete all")
                     }
                 }
             }
@@ -795,34 +783,26 @@ private fun GroupedNotificationItem(
                 horizontalArrangement = Arrangement.End
             ) {
                 if (!notification.isRead) {
-                    TextButton(
-                        onClick = onMarkAsRead,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    IconButton(
+                        onClick = onMarkAsRead
                     ) {
                         Icon(
                             imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp)
+                            contentDescription = "Read",
+                            modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Read", style = MaterialTheme.typography.labelSmall)
                     }
                 }
                 
-                TextButton(
-                    onClick = onDelete,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
-                    )
+                IconButton(
+                    onClick = onDelete
                 ) {
                     Icon(
                         imageVector = Icons.Default.Delete,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp)
+                        contentDescription = "Delete",
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.error
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Delete", style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
@@ -1052,37 +1032,28 @@ fun NotificationHistoryCard(
                 // App rule and importance buttons (left side)
                 Row {
                     if (onSetAppRule != null) {
-                        TextButton(
-                            onClick = { showAppRuleMenu = true },
-                            contentPadding = PaddingValues(horizontal = 12.dp)
+                        IconButton(
+                            onClick = { showAppRuleMenu = true }
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Settings,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
+                                contentDescription = "App Rule",
+                                modifier = Modifier.size(20.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("App Rule")
                         }
                     }
                     
                     // Importance change button
                     if (onImportanceChange != null) {
-                        if (onSetAppRule != null) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                        }
                         Box {
-                            TextButton(
-                                onClick = { showImportanceMenu = true },
-                                contentPadding = PaddingValues(horizontal = 12.dp)
+                            IconButton(
+                                onClick = { showImportanceMenu = true }
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Edit,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
+                                    contentDescription = "Change Importance",
+                                    modifier = Modifier.size(20.dp)
                                 )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Change")
                             }
                             
                             DropdownMenu(
@@ -1125,20 +1096,14 @@ fun NotificationHistoryCard(
                     
                     // Tag edit button
                     if (onTagsChange != null) {
-                        if (onSetAppRule != null || onImportanceChange != null) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                        }
-                        TextButton(
-                            onClick = { showTagEditDialog = true },
-                            contentPadding = PaddingValues(horizontal = 12.dp)
+                        IconButton(
+                            onClick = { showTagEditDialog = true }
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Info,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
+                                contentDescription = "Edit Tags",
+                                modifier = Modifier.size(20.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Tags")
                         }
                     }
                 }
@@ -1148,35 +1113,26 @@ fun NotificationHistoryCard(
                 // Mark read and delete buttons (right side)
                 Row {
                     if (!notification.isRead) {
-                        TextButton(
-                            onClick = onMarkAsRead,
-                            contentPadding = PaddingValues(horizontal = 12.dp)
+                        IconButton(
+                            onClick = onMarkAsRead
                         ) {
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
+                                contentDescription = "Mark read",
+                                modifier = Modifier.size(20.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Mark read")
                         }
-                        Spacer(modifier = Modifier.width(4.dp))
                     }
                     
-                    TextButton(
-                        onClick = onDelete,
-                        contentPadding = PaddingValues(horizontal = 12.dp),
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        )
+                    IconButton(
+                        onClick = onDelete
                     ) {
                         Icon(
                             imageVector = Icons.Default.Delete,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            contentDescription = "Delete",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colorScheme.error
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Delete")
                     }
                 }
             }
@@ -1299,6 +1255,71 @@ private fun formatTimestamp(timestamp: Long): String {
     }
 }
 
+@Composable
+private fun TagListOptionItem(
+    selected: Boolean,
+    onClick: () -> Unit,
+    label: String,
+    emoji: String? = null,
+    isCheckbox: Boolean = false
+) {
+    Surface(
+        onClick = onClick,
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
+        shape = MaterialTheme.shapes.medium,
+        tonalElevation = if (selected) 2.dp else 0.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                if (emoji != null) {
+                    Text(
+                        text = emoji,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+                
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+                )
+            }
+            
+            if (isCheckbox) {
+                Checkbox(
+                    checked = selected,
+                    onCheckedChange = null
+                )
+            } else if (selected) {
+                Icon(
+                    imageVector = Icons.Default.Check,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun TagEditDialog(
@@ -1334,26 +1355,17 @@ fun TagEditDialog(
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold
                         )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Priority.values().forEach { priority ->
-                                FilterChip(
+                                TagListOptionItem(
                                     selected = selectedPriority == priority,
                                     onClick = { selectedPriority = priority },
-                                    label = {
-                                        Text(
-                                            when (priority) {
-                                                Priority.CRITICAL -> "Critical"
-                                                Priority.IMPORTANT -> "Important"
-                                                Priority.NORMAL -> "Normal"
-                                                Priority.LOW -> "Low"
-                                            },
-                                            style = MaterialTheme.typography.labelMedium
-                                        )
-                                    },
-                                    modifier = Modifier.weight(1f)
+                                    label = when (priority) {
+                                        Priority.CRITICAL -> "Critical"
+                                        Priority.IMPORTANT -> "Important"
+                                        Priority.NORMAL -> "Normal"
+                                        Priority.LOW -> "Low"
+                                    }
                                 )
                             }
                         }
@@ -1368,13 +1380,9 @@ fun TagEditDialog(
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold
                         )
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             NotificationContext.values().forEach { context ->
-                                FilterChip(
+                                TagListOptionItem(
                                     selected = context in selectedContexts,
                                     onClick = {
                                         if (context in selectedContexts) {
@@ -1383,21 +1391,9 @@ fun TagEditDialog(
                                             selectedContexts.add(context)
                                         }
                                     },
-                                    label = {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            Text(
-                                                text = getContextIcon(context),
-                                                style = MaterialTheme.typography.labelMedium
-                                            )
-                                            Text(
-                                                text = getContextDisplay(context),
-                                                style = MaterialTheme.typography.labelMedium
-                                            )
-                                        }
-                                    }
+                                    label = getContextDisplay(context),
+                                    emoji = getContextIcon(context),
+                                    isCheckbox = true
                                 )
                             }
                         }
@@ -1412,21 +1408,12 @@ fun TagEditDialog(
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold
                         )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             TimeSensitivity.values().forEach { sensitivity ->
-                                FilterChip(
+                                TagListOptionItem(
                                     selected = selectedTimeSensitivity == sensitivity,
                                     onClick = { selectedTimeSensitivity = sensitivity },
-                                    label = {
-                                        Text(
-                                            sensitivity.getDisplayName(),
-                                            style = MaterialTheme.typography.labelMedium
-                                        )
-                                    },
-                                    modifier = Modifier.weight(1f)
+                                    label = sensitivity.getDisplayName()
                                 )
                             }
                         }
@@ -1441,21 +1428,12 @@ fun TagEditDialog(
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold
                         )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             ActionType.values().forEach { actionType ->
-                                FilterChip(
+                                TagListOptionItem(
                                     selected = selectedActionType == actionType,
                                     onClick = { selectedActionType = actionType },
-                                    label = {
-                                        Text(
-                                            actionType.getDisplayName(),
-                                            style = MaterialTheme.typography.labelSmall
-                                        )
-                                    },
-                                    modifier = Modifier.weight(1f)
+                                    label = actionType.getDisplayName()
                                 )
                             }
                         }

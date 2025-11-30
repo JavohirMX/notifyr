@@ -51,6 +51,15 @@ class EnhancedNotificationRulesEngine @Inject constructor(
         "org.signalapp.signal"
     )
     
+    private val emailApps = setOf(
+        "com.google.android.apps.gmail",
+        "com.google.android.gm",
+        "com.microsoft.office.outlook",
+        "com.yahoo.mobile.client.android.mail",
+        "com.fsck.k9",
+        "com.oneplus.email"
+    )
+    
     private val workApps = setOf(
         "com.slack",
         "com.microsoft.teams",
@@ -292,12 +301,35 @@ class EnhancedNotificationRulesEngine @Inject constructor(
             }
         }
         
+        // For email apps like Gmail, extract sender from title
+        if (emailApps.contains(notification.packageName)) {
+            val title = notification.title.trim()
+            // Gmail format: "Sender Name" or "Sender Name - Subject"
+            // Try to extract the sender part before any dash or colon
+            val senderPart = title.split(" - ", ":").firstOrNull()?.trim()
+            if (senderPart != null && senderPart.isNotEmpty() && senderPart.length < 100) {
+                // Remove common email prefixes/suffixes
+                val cleaned = senderPart
+                    .removePrefix("From: ")
+                    .removePrefix("from ")
+                    .trim()
+                if (cleaned.isNotEmpty()) {
+                    return cleaned
+                }
+            }
+        }
+        
         return null
     }
     
     private fun generateConversationId(notification: NotificationData, sender: String?): String? {
         // For messaging apps, group by app + sender
         if (messagingApps.contains(notification.packageName) && sender != null) {
+            return "${notification.packageName}:${sender}"
+        }
+        
+        // For email apps, group by app + sender (helps with duplicate detection)
+        if (emailApps.contains(notification.packageName) && sender != null) {
             return "${notification.packageName}:${sender}"
         }
         

@@ -63,6 +63,12 @@ interface NotificationDao {
     @Query("SELECT * FROM notifications WHERE packageName = :packageName AND timestamp > :since ORDER BY timestamp DESC")
     suspend fun findRecentNotificationsByPackage(packageName: String, since: Long): List<NotificationEntity>
 
+    @Query("SELECT * FROM notifications WHERE packageName = :packageName AND conversationId = :conversationId AND timestamp > :since ORDER BY timestamp DESC LIMIT 1")
+    suspend fun findRecentDuplicateByConversationId(packageName: String, conversationId: String, since: Long): NotificationEntity?
+
+    @Query("SELECT * FROM notifications WHERE packageName = :packageName AND sender = :sender AND timestamp > :since ORDER BY timestamp DESC LIMIT 1")
+    suspend fun findRecentDuplicateBySender(packageName: String, sender: String, since: Long): NotificationEntity?
+
     @Query("UPDATE notifications SET timestamp = :timestamp WHERE id = :id")
     suspend fun updateTimestamp(id: Long, timestamp: Long)
 }

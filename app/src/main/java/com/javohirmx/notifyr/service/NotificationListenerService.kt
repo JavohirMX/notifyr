@@ -151,7 +151,13 @@ class NotificationListenerService : NotificationListenerService() {
                 timestamp = sbn.postTime
             )
             serviceScope.launch {
-                notificationRepository.upsertWithDedup(notificationData, 30_000L)
+                // Use longer deduplication window for email apps even in DONT_INTERCEPT mode
+                val isEmailApp = packageName == "com.google.android.apps.gmail" || 
+                                packageName == "com.google.android.gm" ||
+                                packageName == "com.microsoft.office.outlook" ||
+                                packageName == "com.yahoo.mobile.client.android.mail"
+                val dedupWindow = if (isEmailApp) 120_000L else 30_000L
+                notificationRepository.upsertWithDedup(notificationData, dedupWindow)
             }
             return // Don't process further - let original notification through
         }
@@ -196,10 +202,17 @@ class NotificationListenerService : NotificationListenerService() {
         val allowedByFocusMode = focusModeManager.shouldShowNotification(enhancedNotification, currentFocusMode)
         
         // Deduplication window - increased for normal notifications to catch more duplicates
+        // Email apps like Gmail get a longer window as they often send multiple notifications for the same email
+        val isEmailApp = packageName == "com.google.android.apps.gmail" || 
+                        packageName == "com.google.android.gm" ||
+                        packageName == "com.microsoft.office.outlook" ||
+                        packageName == "com.yahoo.mobile.client.android.mail"
+        
         val dedupWindowMs = when {
             isCall -> 15_000L
             isOngoing || isMedia -> 60_000L
-            else -> 30_000L  // Increased from 3 seconds to 30 seconds for better duplicate detection
+            isEmailApp -> 120_000L  // 2 minutes for email apps to catch Gmail duplicates
+            else -> 30_000L  // 30 seconds for other apps
         }
         
         // Store with deduplication

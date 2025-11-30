@@ -56,10 +56,36 @@ class NotificationRepository(
 
     /**
      * Normalizes text for duplicate comparison by trimming whitespace
-     * and handling empty/null strings consistently
+     * and handling empty/null strings consistently.
+     * Also removes common Gmail notification suffixes like timestamps.
      */
     private fun normalizeText(text: String?): String {
-        return text?.trim()?.takeIf { it.isNotEmpty() } ?: ""
+        if (text == null) return ""
+        var normalized = text.trim()
+        if (normalized.isEmpty()) return ""
+        
+        // Remove common Gmail notification patterns that can cause false duplicates
+        // Gmail sometimes adds timestamps or other metadata
+        normalized = normalized
+            .replace(Regex("\\s+"), " ") // Normalize whitespace
+            .trim()
+        
+        return normalized
+    }
+    
+    /**
+     * Checks if a package is an email app that benefits from conversationId-based deduplication
+     */
+    private fun isEmailApp(packageName: String): Boolean {
+        val emailApps = setOf(
+            "com.google.android.apps.gmail",
+            "com.google.android.gm",
+            "com.microsoft.office.outlook",
+            "com.yahoo.mobile.client.android.mail",
+            "com.fsck.k9",
+            "com.oneplus.email"
+        )
+        return emailApps.contains(packageName)
     }
 
     /**
@@ -76,8 +102,51 @@ class NotificationRepository(
         packageName: String,
         title: String,
         text: String,
-        since: Long
+        since: Long,
+        conversationId: String? = null,
+        sender: String? = null
     ): NotificationData? {
+        // For email apps, prioritize conversationId/sender-based matching
+        if (isEmailApp(packageName)) {
+            // Try conversationId first (most reliable for email apps)
+            if (conversationId != null && conversationId.isNotEmpty()) {
+                val convMatch = notificationDao.findRecentDuplicateByConversationId(packageName, conversationId, since)
+                if (convMatch != null) {
+                    return convMatch.toDomain()
+                }
+            }
+            
+            // Try sender-based matching for email apps
+            if (sender != null && sender.isNotEmpty()) {
+                val senderMatch = notificationDao.findRecentDuplicateBySender(packageName, sender, since)
+                if (senderMatch != null) {
+                    // Additional check: ensure title/text are similar (not just same sender)
+                    val normalizedTitle = normalizeText(title)
+                    val normalizedText = normalizeText(text)
+                    val existing = senderMatch.toDomain()
+                    val existingNormalizedTitle = normalizeText(existing.title)
+                    val existingNormalizedText = normalizeText(existing.text)
+                    
+                    // For email apps, check if the notification text is the same or very similar
+                    // This handles cases where Gmail sends the same email notification multiple times
+                    val titleMatches = normalizedTitle == existingNormalizedTitle ||
+                                      (normalizedTitle.isNotEmpty() && existingNormalizedTitle.isNotEmpty() &&
+                                       (normalizedTitle.contains(existingNormalizedTitle) ||
+                                        existingNormalizedTitle.contains(normalizedTitle)))
+                    
+                    val textMatches = normalizedText == existingNormalizedText ||
+                                     (normalizedText.isNotEmpty() && existingNormalizedText.isNotEmpty() &&
+                                      (normalizedText.contains(existingNormalizedText) ||
+                                       existingNormalizedText.contains(normalizedText)))
+                    
+                    // If both title and text match (or one is empty and the other matches), it's a duplicate
+                    if (titleMatches && (normalizedText.isEmpty() || existingNormalizedText.isEmpty() || textMatches)) {
+                        return existing
+                    }
+                }
+            }
+        }
+        
         // First try exact match (fast path)
         val exactMatch = notificationDao.findRecentDuplicate(packageName, title, text, since)
         if (exactMatch != null) {
@@ -118,7 +187,9 @@ class NotificationRepository(
             packageName = notification.packageName,
             title = notification.title,
             text = notification.text,
-            since = cutoff
+            since = cutoff,
+            conversationId = notification.conversationId,
+            sender = notification.sender
         )
         return if (dup != null) {
             // Refresh timestamp to keep it recent
