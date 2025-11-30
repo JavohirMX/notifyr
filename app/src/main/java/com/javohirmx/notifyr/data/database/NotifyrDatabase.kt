@@ -8,14 +8,15 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import android.content.Context
 
 @Database(
-    entities = [NotificationEntity::class, ScreenTimeEntity::class],
-    version = 4,
+    entities = [NotificationEntity::class, ScreenTimeEntity::class, CustomTagEntity::class],
+    version = 5,
     exportSchema = false
 )
 abstract class NotifyrDatabase : RoomDatabase() {
     
     abstract fun notificationDao(): NotificationDao
     abstract fun screenTimeDao(): ScreenTimeDao
+    abstract fun customTagDao(): CustomTagDao
     
     companion object {
         const val DATABASE_NAME = "notifyr_database"
@@ -96,6 +97,29 @@ abstract class NotifyrDatabase : RoomDatabase() {
                 )
                 database.execSQL(
                     "CREATE INDEX IF NOT EXISTS index_screen_time_date_hour ON screen_time(date, hour)"
+                )
+            }
+        }
+        
+        /**
+         * Migration from version 4 to 5
+         * Adds: Custom tags table
+         */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Create custom_tags table
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS custom_tags (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        color TEXT,
+                        createdAt INTEGER NOT NULL
+                    )
+                """)
+                
+                // Create unique index on name
+                database.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS index_custom_tags_name ON custom_tags(name)"
                 )
             }
         }

@@ -5,9 +5,13 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class NotificationTags(
     val priority: Priority = Priority.NORMAL,
-    val contexts: Set<NotificationContext> = emptySet(),
+    val customTags: Set<String> = emptySet(), // Free-form per-notification tags
+    val globalTagIds: Set<String> = emptySet(), // References to global reusable tags
     val timeSensitivity: TimeSensitivity = TimeSensitivity.LATER,
-    val actionType: ActionType = ActionType.FYI
+    val actionType: ActionType = ActionType.FYI,
+    // Deprecated: kept for backward compatibility during migration
+    @Deprecated("Use customTags and globalTagIds instead")
+    val contexts: Set<NotificationContext> = emptySet()
 )
 
 @Serializable

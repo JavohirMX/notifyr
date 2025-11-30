@@ -13,8 +13,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -181,11 +183,14 @@ fun DailyScreenTimeCard(
     var isExpanded by remember { mutableStateOf(false) }
     
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        onClick = { isExpanded = !isExpanded }
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        onClick = { isExpanded = !isExpanded },
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(20.dp)
         ) {
             // Header
             Row(
@@ -196,30 +201,42 @@ fun DailyScreenTimeCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = dailyScreenTime.getFormattedDate(),
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = dailyScreenTime.getDayOfWeek(),
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                Text(
-                    text = dailyScreenTime.getFormattedDuration(),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                Column(
+                    horizontalAlignment = Alignment.End
+                ) {
+                    Text(
+                        text = dailyScreenTime.getFormattedDuration(),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    if (dailyScreenTime.appBreakdown.isNotEmpty()) {
+                        Text(
+                            text = "${dailyScreenTime.appBreakdown.size} apps",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
             
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
             
             // Top apps preview
             if (dailyScreenTime.appBreakdown.isNotEmpty()) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     dailyScreenTime.appBreakdown.take(3).forEach { appTime ->
                         AppTimeChip(
@@ -231,43 +248,64 @@ fun DailyScreenTimeCard(
                 }
             }
             
-            // Expandable content
+            // Expandable content with smooth animation
             AnimatedVisibility(
                 visible = isExpanded,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
+                enter = expandVertically(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    )
+                ) + fadeIn(
+                    animationSpec = tween(300)
+                ),
+                exit = shrinkVertically(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    )
+                ) + fadeOut(
+                    animationSpec = tween(200)
+                )
             ) {
                 Column(
-                    modifier = Modifier.padding(top = 16.dp)
+                    modifier = Modifier.padding(top = 20.dp)
                 ) {
-                    Divider()
-                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 8.dp),
+                        thickness = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant
+                    )
                     
                     // App breakdown
                     Text(
-                        text = "Apps",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
+                        text = "App Usage",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 12.dp)
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
                     
-                    dailyScreenTime.appBreakdown.forEach { appTime ->
-                        AppTimeRow(
-                            appScreenTime = appTime,
-                            context = context,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        dailyScreenTime.appBreakdown.forEach { appTime ->
+                            AppTimeRow(
+                                appScreenTime = appTime,
+                                context = context,
+                                totalDayDuration = dailyScreenTime.totalDurationMs
+                            )
+                        }
                     }
                     
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(24.dp))
                     
                     // Hourly timeline
                     Text(
-                        text = "Timeline",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
+                        text = "Hourly Breakdown",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 12.dp)
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
                     
                     HourlyTimelineView(
                         hourlyData = dailyScreenTime.hourlyData,
@@ -276,7 +314,8 @@ fun DailyScreenTimeCard(
                 }
             }
             
-            // Expand indicator
+            // Expand indicator with rotation animation
+            Spacer(modifier = Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center
@@ -284,8 +323,13 @@ fun DailyScreenTimeCard(
                 Icon(
                     if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     contentDescription = if (isExpanded) "Collapse" else "Expand",
-                    modifier = Modifier.size(24.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    modifier = Modifier
+                        .size(28.dp)
+                        .graphicsLayer {
+                            rotationZ = if (isExpanded) 180f else 0f
+                        }
+                        .animateContentSize(),
+                    tint = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -335,8 +379,18 @@ fun AppTimeChip(
 fun AppTimeRow(
     appScreenTime: AppScreenTime,
     context: android.content.Context,
+    totalDayDuration: Long,
     modifier: Modifier = Modifier
 ) {
+    // Calculate progress percentage (0.0 to 1.0)
+    val progress = remember(appScreenTime.totalDurationMs, totalDayDuration) {
+        if (totalDayDuration > 0) {
+            (appScreenTime.totalDurationMs.toFloat() / totalDayDuration.toFloat()).coerceIn(0f, 1f)
+        } else {
+            0f
+        }
+    }
+    
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -362,17 +416,15 @@ fun AppTimeRow(
             )
         }
         
-        // Progress bar showing relative usage
-        val maxDuration = remember(appScreenTime.totalDurationMs) {
-            // This will be calculated relative to the day's total
-            appScreenTime.totalDurationMs
-        }
+        // Progress bar showing relative usage as percentage of day's total
         LinearProgressIndicator(
-            progress = { 0.5f }, // Placeholder - would need total day duration
+            progress = { progress },
             modifier = Modifier
-                .width(60.dp)
-                .height(4.dp)
-                .clip(RoundedCornerShape(2.dp))
+                .width(80.dp)
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp)),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant
         )
     }
 }
@@ -382,24 +434,33 @@ fun HourlyTimelineView(
     hourlyData: List<HourlyScreenTime>,
     context: android.content.Context
 ) {
-    // Group by hour
-    val hourlyGroups = hourlyData.groupBy { it.hour }
+    // Group by hour - ensure we only process data for the current day
+    val hourlyGroups = hourlyData
+        .filter { it.hour in 0..23 } // Validate hour range
+        .groupBy { it.hour }
+    
+    // Calculate max duration for proportional visualization
+    val maxDuration = hourlyGroups.values.maxOfOrNull { group ->
+        group.sumOf { it.durationMs }
+    } ?: 1L
     
     Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
+        // Show all 24 hours for better visualization
         (0..23).forEach { hour ->
             val hourData = hourlyGroups[hour] ?: emptyList()
             val totalDuration = hourData.sumOf { it.durationMs }
             
-            if (totalDuration > 0) {
-                HourlyTimelineRow(
-                    hour = hour,
-                    durationMs = totalDuration,
-                    apps = hourData,
-                    context = context
-                )
-            }
+            // Show all hours, even if empty (with reduced opacity)
+            HourlyTimelineRow(
+                hour = hour,
+                durationMs = totalDuration,
+                apps = hourData,
+                context = context,
+                maxDuration = maxDuration,
+                modifier = Modifier.alpha(if (totalDuration > 0) 1f else 0.3f)
+            )
         }
     }
 }
@@ -409,51 +470,94 @@ fun HourlyTimelineRow(
     hour: Int,
     durationMs: Long,
     apps: List<HourlyScreenTime>,
-    context: android.content.Context
+    context: android.content.Context,
+    maxDuration: Long,
+    modifier: Modifier = Modifier
 ) {
+    // Calculate proportional width (0.0 to 1.0)
+    val progress = if (maxDuration > 0 && durationMs > 0) {
+        (durationMs.toFloat() / maxDuration.toFloat()).coerceIn(0f, 1f)
+    } else {
+        0f
+    }
+    
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
             text = formatHour(hour),
-            style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.width(60.dp),
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.width(50.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         
-        // Timeline bar
+        // Timeline bar with proportional visualization
         Box(
             modifier = Modifier
                 .weight(1f)
-                .height(24.dp)
-                .clip(RoundedCornerShape(4.dp))
+                .height(28.dp)
+                .clip(RoundedCornerShape(6.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            // Show app icons or colored segments
-            Row(
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                apps.take(5).forEach { app ->
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
-                    )
+            if (durationMs > 0 && apps.isNotEmpty()) {
+                // Show proportional bar with app segments using Row
+                val sortedApps = apps.sortedByDescending { it.durationMs }
+                val totalDuration = durationMs.toFloat()
+                
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalArrangement = Arrangement.spacedBy(0.dp)
+                ) {
+                    sortedApps.take(8).forEachIndexed { index, app ->
+                        val appDuration = app.durationMs
+                        val appWeight = (appDuration.toFloat() / totalDuration).coerceIn(0f, 1f)
+                        
+                        if (appWeight > 0.01f) { // Only show if > 1% of hour
+                            Box(
+                                modifier = Modifier
+                                    .weight(appWeight)
+                                    .fillMaxHeight()
+                                    .clip(
+                                        RoundedCornerShape(
+                                            topStart = if (index == 0) 6.dp else 0.dp,
+                                            topEnd = if (index == sortedApps.take(8).size - 1) 6.dp else 0.dp,
+                                            bottomStart = if (index == 0) 6.dp else 0.dp,
+                                            bottomEnd = if (index == sortedApps.take(8).size - 1) 6.dp else 0.dp
+                                        )
+                                    )
+                                    .background(getColorForApp(app.packageName))
+                            )
+                        }
+                    }
                 }
             }
         }
         
         Text(
-            text = formatDuration(durationMs),
+            text = if (durationMs > 0) formatDuration(durationMs) else "",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(50.dp)
         )
     }
+}
+
+// Helper function to get consistent color for app
+private fun getColorForApp(packageName: String): Color {
+    val hash = packageName.hashCode()
+    val colors = listOf(
+        Color(0xFF6200EA), // Purple
+        Color(0xFF00BCD4), // Cyan
+        Color(0xFF4CAF50), // Green
+        Color(0xFFFF9800), // Orange
+        Color(0xFFF44336), // Red
+        Color(0xFF2196F3), // Blue
+        Color(0xFFE91E63), // Pink
+        Color(0xFF009688), // Teal
+    )
+    return colors[hash.mod(colors.size)]
 }
 
 @Composable

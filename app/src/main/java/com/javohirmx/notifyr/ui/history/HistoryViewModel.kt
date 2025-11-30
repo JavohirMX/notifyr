@@ -21,7 +21,8 @@ class HistoryViewModel @Inject constructor(
     private val notificationRepository: NotificationRepository,
     private val groupNotificationsUseCase: GroupNotificationsUseCase,
     private val appRulesRepository: com.javohirmx.notifyr.data.repository.AppRulesRepository,
-    private val hybridClassifier: HybridNotificationClassifier
+    private val hybridClassifier: HybridNotificationClassifier,
+    val customTagRepository: com.javohirmx.notifyr.data.repository.CustomTagRepository
 ) : AndroidViewModel(application) {
     
     private val sharedPreferences = application.getSharedPreferences("notifyr_prefs", android.content.Context.MODE_PRIVATE)

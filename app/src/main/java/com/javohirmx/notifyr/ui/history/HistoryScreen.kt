@@ -49,7 +49,15 @@ import com.javohirmx.notifyr.domain.model.Priority
 import com.javohirmx.notifyr.domain.model.NotificationContext
 import com.javohirmx.notifyr.domain.model.TimeSensitivity
 import com.javohirmx.notifyr.domain.model.ActionType
+import com.javohirmx.notifyr.data.repository.CustomTagRepository
+import com.javohirmx.notifyr.data.database.CustomTagEntity
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -960,30 +968,26 @@ fun NotificationHistoryCard(
             }
             
             // Tags and metadata
-            if (notification.tags.contexts.isNotEmpty() || 
+            val hasCustomTags = notification.tags.customTags.isNotEmpty() || notification.tags.globalTagIds.isNotEmpty()
+            if (hasCustomTags || 
                 notification.tags.timeSensitivity == com.javohirmx.notifyr.domain.model.TimeSensitivity.IMMEDIATE) {
                 Spacer(modifier = Modifier.height(12.dp))
                 
-                Row(
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    // Context chips
-                    notification.tags.contexts.take(3).forEach { context ->
+                    // Custom tags chips
+                    notification.tags.customTags.take(5).forEach { tag ->
                         AssistChip(
                             onClick = { },
                             label = { 
                                 Text(
-                                    text = getContextDisplay(context),
+                                    text = tag,
                                     style = MaterialTheme.typography.labelSmall
                                 ) 
-                            },
-                            leadingIcon = {
-                                Text(
-                                    text = getContextIcon(context),
-                                    style = MaterialTheme.typography.labelMedium
-                                )
                             },
                             colors = AssistChipDefaults.assistChipColors(
                                 containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
@@ -992,6 +996,10 @@ fun NotificationHistoryCard(
                             modifier = Modifier.height(28.dp)
                         )
                     }
+                    
+                    // Global tags (we'll need to load them, but for now show IDs)
+                    // Note: In a real implementation, you'd load global tags from repository
+                    // For now, we'll just show a placeholder or skip them in the card
                     
                     // Time sensitivity indicator
                     if (notification.tags.timeSensitivity == com.javohirmx.notifyr.domain.model.TimeSensitivity.IMMEDIATE) {
@@ -1158,8 +1166,10 @@ fun NotificationHistoryCard(
     
     // Tag Edit Dialog
     if (showTagEditDialog && onTagsChange != null) {
+        val historyViewModel: HistoryViewModel = hiltViewModel()
         TagEditDialog(
             notification = notification,
+            customTagRepository = historyViewModel.customTagRepository,
             onDismiss = { showTagEditDialog = false },
             onSave = { updatedTags ->
                 onTagsChange(notification, updatedTags)
@@ -1324,13 +1334,28 @@ private fun TagListOptionItem(
 @Composable
 fun TagEditDialog(
     notification: NotificationData,
+    customTagRepository: CustomTagRepository,
     onDismiss: () -> Unit,
     onSave: (NotificationTags) -> Unit
 ) {
     var selectedPriority by remember { mutableStateOf(notification.tags.priority) }
-    var selectedContexts by remember { mutableStateOf(notification.tags.contexts.toMutableSet()) }
+    var selectedCustomTags by remember { mutableStateOf(notification.tags.customTags.toSet()) }
+    var selectedGlobalTagIds by remember { mutableStateOf(notification.tags.globalTagIds.toSet()) }
     var selectedTimeSensitivity by remember { mutableStateOf(notification.tags.timeSensitivity) }
     var selectedActionType by remember { mutableStateOf(notification.tags.actionType) }
+    
+    // State for adding new custom tag
+    var newCustomTagText by remember { mutableStateOf("") }
+    var showCreateGlobalTagDialog by remember { mutableStateOf(false) }
+    var newGlobalTagName by remember { mutableStateOf("") }
+    
+    // Load global tags
+    val globalTags by customTagRepository.getAllTags().collectAsState(initial = emptyList())
+    
+    // Map global tag IDs to tag entities
+    val selectedGlobalTags = remember(selectedGlobalTagIds, globalTags) {
+        globalTags.filter { it.id.toString() in selectedGlobalTagIds }
+    }
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1372,30 +1397,126 @@ fun TagEditDialog(
                     }
                 }
                 
-                // Context Section
+                // Custom Tags Section
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = "Contexts",
+                            text = "Custom Tags",
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold
                         )
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            NotificationContext.values().forEach { context ->
-                                TagListOptionItem(
-                                    selected = context in selectedContexts,
-                                    onClick = {
-                                        if (context in selectedContexts) {
-                                            selectedContexts.remove(context)
-                                        } else {
-                                            selectedContexts.add(context)
+                        
+                        // Add new custom tag input
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedTextField(
+                                value = newCustomTagText,
+                                onValueChange = { newCustomTagText = it },
+                                label = { Text("Add custom tag") },
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(
+                                    onDone = {
+                                        if (newCustomTagText.isNotBlank() && newCustomTagText !in selectedCustomTags) {
+                                            selectedCustomTags = selectedCustomTags + newCustomTagText.trim()
+                                            newCustomTagText = ""
                                         }
-                                    },
-                                    label = getContextDisplay(context),
-                                    emoji = getContextIcon(context),
-                                    isCheckbox = true
+                                    }
                                 )
+                            )
+                            IconButton(
+                                onClick = {
+                                    if (newCustomTagText.isNotBlank() && newCustomTagText.trim() !in selectedCustomTags) {
+                                        selectedCustomTags = selectedCustomTags + newCustomTagText.trim()
+                                        newCustomTagText = ""
+                                    }
+                                },
+                                enabled = newCustomTagText.isNotBlank() && newCustomTagText.trim() !in selectedCustomTags
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "Add tag")
                             }
+                        }
+                        
+                        // Display selected custom tags
+                        if (selectedCustomTags.isNotEmpty()) {
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                selectedCustomTags.forEach { tag ->
+                                    AssistChip(
+                                        onClick = {
+                                            selectedCustomTags = selectedCustomTags - tag
+                                        },
+                                        label = { Text(tag) },
+                                        trailingIcon = {
+                                            Icon(
+                                                Icons.Default.Close,
+                                                contentDescription = "Remove",
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        },
+                                        colors = AssistChipDefaults.assistChipColors(
+                                            containerColor = MaterialTheme.colorScheme.secondaryContainer
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Global Tags Section
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Global Tags",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            TextButton(
+                                onClick = { showCreateGlobalTagDialog = true }
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("New")
+                            }
+                        }
+                        
+                        // Display global tags
+                        if (globalTags.isNotEmpty()) {
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                globalTags.forEach { tag ->
+                                    TagListOptionItem(
+                                        selected = tag.id.toString() in selectedGlobalTagIds,
+                                        onClick = {
+                                            selectedGlobalTagIds = if (tag.id.toString() in selectedGlobalTagIds) {
+                                                selectedGlobalTagIds - tag.id.toString()
+                                            } else {
+                                                selectedGlobalTagIds + tag.id.toString()
+                                            }
+                                        },
+                                        label = tag.name,
+                                        isCheckbox = true
+                                    )
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = "No global tags. Create one to reuse across notifications.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                 }
@@ -1447,7 +1568,8 @@ fun TagEditDialog(
                     onSave(
                         NotificationTags(
                             priority = selectedPriority,
-                            contexts = selectedContexts,
+                            customTags = selectedCustomTags,
+                            globalTagIds = selectedGlobalTagIds,
                             timeSensitivity = selectedTimeSensitivity,
                             actionType = selectedActionType
                         )
@@ -1463,4 +1585,57 @@ fun TagEditDialog(
             }
         }
     )
+    
+    // Create Global Tag Dialog
+    if (showCreateGlobalTagDialog) {
+        AlertDialog(
+            onDismissRequest = { 
+                showCreateGlobalTagDialog = false
+                newGlobalTagName = ""
+            },
+            title = { Text("Create Global Tag") },
+            text = {
+                OutlinedTextField(
+                    value = newGlobalTagName,
+                    onValueChange = { newGlobalTagName = it },
+                    label = { Text("Tag name") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                val scope = rememberCoroutineScope()
+                TextButton(
+                    onClick = {
+                        if (newGlobalTagName.isNotBlank()) {
+                            scope.launch {
+                                try {
+                                    val tagId = customTagRepository.insertTag(newGlobalTagName.trim())
+                                    // Automatically select the newly created tag
+                                    selectedGlobalTagIds = selectedGlobalTagIds + tagId.toString()
+                                    showCreateGlobalTagDialog = false
+                                    newGlobalTagName = ""
+                                } catch (e: Exception) {
+                                    android.util.Log.e("TagEditDialog", "Failed to create global tag", e)
+                                }
+                            }
+                        }
+                    },
+                    enabled = newGlobalTagName.isNotBlank()
+                ) {
+                    Text("Create")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showCreateGlobalTagDialog = false
+                        newGlobalTagName = ""
+                    }
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 }

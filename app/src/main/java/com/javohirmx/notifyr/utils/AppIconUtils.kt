@@ -1,6 +1,7 @@
 package com.javohirmx.notifyr.utils
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -91,14 +92,51 @@ object AppIconUtils {
     ): Bitmap {
         val packageManager = context.packageManager
         
-        // Try to get the actual app icon
+        // Validate package name
+        if (packageName.isBlank()) {
+            android.util.Log.w("AppIconUtils", "Blank package name provided")
+            return createFallbackIconBitmap(appName, sizePx)
+        }
+        
+        // Validate package exists before trying to load
         try {
-            val drawable = packageManager.getApplicationIcon(packageName)
-            return drawable.toBitmap(width = sizePx, height = sizePx, config = Bitmap.Config.ARGB_8888)
-        } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
-            android.util.Log.d("AppIconUtils", "App not found: $packageName")
-        } catch (e: Exception) {
-            android.util.Log.d("AppIconUtils", "Failed to load icon for $packageName: ${e.message}")
+            packageManager.getPackageInfo(packageName, 0)
+        } catch (e: PackageManager.NameNotFoundException) {
+            // Package doesn't exist, remove from cache
+            removeFromCache(packageName)
+            android.util.Log.d("AppIconUtils", "Package not found: $packageName")
+            return createFallbackIconBitmap(appName, sizePx)
+        }
+        
+        // Try to get the actual app icon with retry
+        var lastException: Exception? = null
+        repeat(2) { attempt ->
+            try {
+                val drawable = packageManager.getApplicationIcon(packageName)
+                return drawable.toBitmap(width = sizePx, height = sizePx, config = Bitmap.Config.ARGB_8888)
+            } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
+                lastException = e
+                removeFromCache(packageName)
+                android.util.Log.d("AppIconUtils", "App not found: $packageName")
+                // Don't retry for NameNotFoundException
+                return@repeat
+            } catch (e: SecurityException) {
+                lastException = e
+                android.util.Log.w("AppIconUtils", "Security exception loading icon for $packageName: ${e.message}")
+                // Don't retry for security exceptions
+                return@repeat
+            } catch (e: Exception) {
+                lastException = e
+                android.util.Log.d("AppIconUtils", "Failed to load icon for $packageName (attempt ${attempt + 1}): ${e.message}")
+                if (attempt == 0) {
+                    // Wait a bit before retry
+                    try {
+                        Thread.sleep(50)
+                    } catch (ie: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                    }
+                }
+            }
         }
         
         // Fallback 1: Try system default app icon
@@ -198,24 +236,84 @@ object AppIconUtils {
         val sizePx = with(density) { (sizeDp * 2f).roundToPx() } // 2x for high quality
         
         return remember(packageName, sizePx) {
-            try {
-                // Try to get the actual app icon
-                val drawable = packageManager.getApplicationIcon(packageName)
-                val bitmap = drawable.toBitmap(width = sizePx, height = sizePx, config = android.graphics.Bitmap.Config.ARGB_8888)
-                BitmapPainter(bitmap.asImageBitmap())
-            } catch (e: Exception) {
-                // App might be uninstalled or inaccessible, use fallback
-                android.util.Log.d("AppIconUtils", "Failed to load icon for $packageName: ${e.message}")
-                try {
-                    val fallback = ContextCompat.getDrawable(context, android.R.drawable.sym_def_app_icon)
-                        ?: ContextCompat.getDrawable(context, android.R.drawable.ic_menu_info_details)
-                    val bitmap = fallback?.toBitmap(width = sizePx, height = sizePx, config = android.graphics.Bitmap.Config.ARGB_8888)
-                    if (bitmap != null) BitmapPainter(bitmap.asImageBitmap()) else null
-                } catch (fallbackError: Exception) {
-                    // Even fallback failed, return null and UI will handle it
-                    null
+            // Validate package name first
+            if (packageName.isBlank()) {
+                android.util.Log.w("AppIconUtils", "Blank package name provided")
+                return@remember null
+            }
+            
+            // Check cache first (for Composable version)
+            val cacheKey = "${packageName}_${sizePx}"
+            cacheLock.read {
+                iconCache.get(cacheKey)?.let { cachedBitmap ->
+                    return@remember BitmapPainter(cachedBitmap.asImageBitmap())
                 }
             }
+            
+            // Try to load icon with retry logic
+            var lastException: Exception? = null
+            repeat(2) { attempt ->
+                try {
+                    // Validate package exists before trying to load
+                    try {
+                        packageManager.getPackageInfo(packageName, 0)
+                    } catch (e: PackageManager.NameNotFoundException) {
+                        // Package doesn't exist, remove from cache if present
+                        removeFromCache(packageName)
+                        android.util.Log.d("AppIconUtils", "Package not found: $packageName")
+                        return@remember null
+                    }
+                    
+                    // Try to get the actual app icon
+                    val drawable = packageManager.getApplicationIcon(packageName)
+                    val bitmap = drawable.toBitmap(width = sizePx, height = sizePx, config = android.graphics.Bitmap.Config.ARGB_8888)
+                    
+                    // Cache the successful result
+                    cacheLock.write {
+                        iconCache.put(cacheKey, bitmap)
+                    }
+                    
+                    return@remember BitmapPainter(bitmap.asImageBitmap())
+                } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
+                    lastException = e
+                    // Package not found, remove from cache
+                    removeFromCache(packageName)
+                    android.util.Log.d("AppIconUtils", "App not found: $packageName (attempt ${attempt + 1})")
+                    // Don't retry for NameNotFoundException
+                    return@remember null
+                } catch (e: SecurityException) {
+                    lastException = e
+                    android.util.Log.w("AppIconUtils", "Security exception loading icon for $packageName: ${e.message}")
+                    // Don't retry for security exceptions
+                    return@remember null
+                } catch (e: Exception) {
+                    lastException = e
+                    android.util.Log.d("AppIconUtils", "Failed to load icon for $packageName (attempt ${attempt + 1}): ${e.message}")
+                    if (attempt == 0) {
+                        // Wait a bit before retry (only for transient errors)
+                        try {
+                            Thread.sleep(50)
+                        } catch (ie: InterruptedException) {
+                            Thread.currentThread().interrupt()
+                        }
+                    }
+                }
+            }
+            
+            // All attempts failed, try system fallback
+            try {
+                val fallback = ContextCompat.getDrawable(context, android.R.drawable.sym_def_app_icon)
+                    ?: ContextCompat.getDrawable(context, android.R.drawable.ic_menu_info_details)
+                val bitmap = fallback?.toBitmap(width = sizePx, height = sizePx, config = android.graphics.Bitmap.Config.ARGB_8888)
+                if (bitmap != null) {
+                    return@remember BitmapPainter(bitmap.asImageBitmap())
+                }
+            } catch (fallbackError: Exception) {
+                android.util.Log.w("AppIconUtils", "Fallback icon also failed: ${fallbackError.message}")
+            }
+            
+            // Return null - UI will show placeholder
+            null
         }
     }
     

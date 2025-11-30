@@ -25,7 +25,9 @@ class ScreenTimeRepository(
         val entitiesByDate = allEntities.groupBy { it.date }
         
         return dailyAggregates.map { aggregate ->
-            val dateEntities = entitiesByDate[aggregate.date] ?: emptyList()
+            // Strictly filter entities by date to prevent cross-day contamination
+            val dateEntities = (entitiesByDate[aggregate.date] ?: emptyList())
+                .filter { it.date == aggregate.date } // Double-check date match
             
             // Group by app for this day
             val appBreakdown = dateEntities
@@ -41,8 +43,10 @@ class ScreenTimeRepository(
                 }
                 .sortedByDescending { it.totalDurationMs }
             
-            // Get hourly data for this day
-            val hourlyData = dateEntities.map { it.toDomain() }
+            // Get hourly data for this day - ensure it's strictly filtered by date
+            val hourlyData = dateEntities
+                .filter { it.date == aggregate.date } // Ensure date match
+                .map { it.toDomain() }
             
             DailyScreenTime(
                 date = aggregate.date,
