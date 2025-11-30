@@ -57,6 +57,62 @@
         <receiver
             android:name=".service.NotificationActionReceiver"
             android:exported="false" />
+        
+        <!-- Notification Widget Provider -->
+        <receiver
+            android:name=".widget.NotificationWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.javohirmx.notifyr.widget.ACTION_REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/notification_widget_info" />
+        </receiver>
+        
+        <!-- Screen Time Widget Provider -->
+        <receiver
+            android:name=".widget.ScreenTimeWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.javohirmx.notifyr.widget.ACTION_REFRESH_SCREENTIME" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/screentime_widget_info" />
+        </receiver>
+        
+        <!-- Notification Widget Update Service -->
+        <service
+            android:name=".widget.NotificationWidgetUpdateService"
+            android:exported="false" />
+        
+        <!-- Screen Time Widget Update Service -->
+        <service
+            android:name=".widget.ScreenTimeWidgetUpdateService"
+            android:exported="false" />
+        
+        <!-- Notification Widget Configuration Activity -->
+        <activity
+            android:name=".widget.NotificationWidgetConfigureActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Notifyr">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+        
+        <!-- Screen Time Widget Configuration Activity -->
+        <activity
+            android:name=".widget.ScreenTimeWidgetConfigureActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Notifyr">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
             
         <!-- Remove the default WorkManager initializer since we implement Configuration.Provider -->
         <provider

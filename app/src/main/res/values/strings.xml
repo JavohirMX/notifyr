@@ -1,3 +1,10 @@
 <resources>
     <string name="app_name">Notifyr</string>
+    
+    <!-- Widget strings -->
+    <string name="widget_notification_description">Display filtered notifications on your home screen</string>
+    <string name="widget_screentime_description">Display your screen time timeline for the last 7 days</string>
+    <string name="widget_refresh">Refresh</string>
+    <string name="widget_notifications">Notifications</string>
+    <string name="widget_screen_time">Screen Time</string>
 </resources>

@@ -6,6 +6,7 @@ import com.javohirmx.notifyr.data.database.ScreenTimeSessionDao
 import com.javohirmx.notifyr.data.repository.NotificationRepository
 import com.javohirmx.notifyr.data.repository.ScreenTimeRepository
 import com.javohirmx.notifyr.domain.usecase.GroupNotificationsUseCase
+import com.javohirmx.notifyr.widget.WidgetRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -37,5 +38,14 @@ object RepositoryModule {
     @Singleton
     fun provideGroupNotificationsUseCase(): GroupNotificationsUseCase {
         return GroupNotificationsUseCase()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideWidgetRepository(
+        notificationRepository: NotificationRepository,
+        screenTimeRepository: ScreenTimeRepository
+    ): WidgetRepository {
+        return WidgetRepository(notificationRepository, screenTimeRepository)
     }
 }

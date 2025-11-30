@@ -5,6 +5,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.javohirmx.notifyr.domain.usecase.CollectScreenTimeUseCase
+import com.javohirmx.notifyr.widget.WidgetUpdateHelper
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 
@@ -20,6 +21,9 @@ class ScreenTimeCollectionWorker @AssistedInject constructor(
             // Collect both hourly aggregates and minute-level sessions
             val hourlySuccess = collectScreenTimeUseCase()
             val sessionSuccess = collectScreenTimeUseCase.collectSessions()
+            
+            // Update screen time widgets
+            WidgetUpdateHelper.updateScreenTimeWidgets(applicationContext)
             
             if (hourlySuccess || sessionSuccess) {
                 Result.success()

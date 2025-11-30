@@ -12,6 +12,7 @@ import com.javohirmx.notifyr.domain.model.NotificationImportance
 import com.javohirmx.notifyr.domain.model.shouldShowImmediately
 import com.javohirmx.notifyr.domain.rules.EnhancedNotificationRulesEngine
 import com.javohirmx.notifyr.domain.rules.NotificationRulesEngine
+import com.javohirmx.notifyr.widget.WidgetUpdateHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -217,6 +218,9 @@ class NotificationListenerService : NotificationListenerService() {
         
         // Store with deduplication
         notificationRepository.upsertWithDedup(enhancedNotification, dedupWindowMs)
+        
+        // Update notification widgets
+        WidgetUpdateHelper.updateNotificationWidgets(this)
         
         // NOTIFICATION SUPPRESSION LOGIC
         if (!shouldPreserveOriginal) {
