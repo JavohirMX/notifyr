@@ -17,8 +17,11 @@ class ScreenTimeCollectionWorker @AssistedInject constructor(
     
     override suspend fun doWork(): Result {
         return try {
-            val success = collectScreenTimeUseCase()
-            if (success) {
+            // Collect both hourly aggregates and minute-level sessions
+            val hourlySuccess = collectScreenTimeUseCase()
+            val sessionSuccess = collectScreenTimeUseCase.collectSessions()
+            
+            if (hourlySuccess || sessionSuccess) {
                 Result.success()
             } else {
                 // Permission not granted, but don't fail - just retry later

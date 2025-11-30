@@ -2,6 +2,7 @@ package com.javohirmx.notifyr.di
 
 import com.javohirmx.notifyr.data.database.NotificationDao
 import com.javohirmx.notifyr.data.database.ScreenTimeDao
+import com.javohirmx.notifyr.data.database.ScreenTimeSessionDao
 import com.javohirmx.notifyr.data.repository.NotificationRepository
 import com.javohirmx.notifyr.data.repository.ScreenTimeRepository
 import com.javohirmx.notifyr.domain.usecase.GroupNotificationsUseCase
@@ -26,9 +27,10 @@ object RepositoryModule {
     @Provides
     @Singleton
     fun provideScreenTimeRepository(
-        screenTimeDao: ScreenTimeDao
+        screenTimeDao: ScreenTimeDao,
+        screenTimeSessionDao: ScreenTimeSessionDao
     ): ScreenTimeRepository {
-        return ScreenTimeRepository(screenTimeDao)
+        return ScreenTimeRepository(screenTimeDao, screenTimeSessionDao)
     }
     
     @Provides

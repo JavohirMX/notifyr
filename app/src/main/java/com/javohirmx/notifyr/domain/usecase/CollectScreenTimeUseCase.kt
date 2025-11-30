@@ -1,10 +1,12 @@
 package com.javohirmx.notifyr.domain.usecase
 
+import android.app.usage.UsageEvents
 import android.app.usage.UsageStats
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.pm.PackageManager
 import com.javohirmx.notifyr.data.database.ScreenTimeEntity
+import com.javohirmx.notifyr.data.database.ScreenTimeSessionEntity
 import com.javohirmx.notifyr.data.repository.ScreenTimeRepository
 import com.javohirmx.notifyr.utils.PermissionUtils
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -239,6 +241,133 @@ class CollectScreenTimeUseCase @Inject constructor(
         )
         
         return systemPackages.any { packageName.startsWith(it) }
+    }
+    
+    /**
+     * Collect usage sessions with minute-level precision using UsageEvents API
+     * This provides exact start and end times for each app usage session
+     */
+    suspend fun collectSessions(): Boolean {
+        if (!PermissionUtils.isUsageStatsPermissionGranted(context)) {
+            return false
+        }
+        
+        val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
+            ?: return false
+        
+        val now = System.currentTimeMillis()
+        val calendar = Calendar.getInstance()
+        calendar.timeInMillis = now
+        calendar.add(Calendar.HOUR, -24) // Get last 24 hours
+        val startTime = calendar.timeInMillis
+        
+        // Query usage events for minute-level precision
+        val usageEvents = usageStatsManager.queryEvents(startTime, now)
+            ?: return false
+        
+        val packageManager = context.packageManager
+        val sessions = mutableListOf<ScreenTimeSessionEntity>()
+        
+        // Track active sessions: packageName -> startTime
+        val activeSessions = mutableMapOf<String, Long>()
+        val appNames = mutableMapOf<String, String>()
+        
+        // Process events chronologically
+        while (usageEvents.hasNextEvent()) {
+            val event = UsageEvents.Event()
+            if (!usageEvents.getNextEvent(event)) {
+                break
+            }
+            
+            val packageName = event.packageName
+            
+            // Skip system packages
+            if (isSystemPackage(packageName)) {
+                continue
+            }
+            
+            // Get app name (cache it)
+            if (!appNames.containsKey(packageName)) {
+                appNames[packageName] = try {
+                    val appInfo = packageManager.getApplicationInfo(packageName, 0)
+                    packageManager.getApplicationLabel(appInfo).toString()
+                } catch (e: PackageManager.NameNotFoundException) {
+                    packageName
+                }
+            }
+            val appName = appNames[packageName]!!
+            
+            val eventTime = event.timeStamp
+            
+            when (event.eventType) {
+                UsageEvents.Event.MOVE_TO_FOREGROUND -> {
+                    // App moved to foreground - start session
+                    activeSessions[packageName] = eventTime
+                }
+                UsageEvents.Event.MOVE_TO_BACKGROUND -> {
+                    // App moved to background - end session
+                    val sessionStart = activeSessions.remove(packageName)
+                    if (sessionStart != null && sessionStart < eventTime) {
+                        val duration = eventTime - sessionStart
+                        
+                        // Get day start timestamp (midnight)
+                        calendar.timeInMillis = sessionStart
+                        calendar.set(Calendar.HOUR_OF_DAY, 0)
+                        calendar.set(Calendar.MINUTE, 0)
+                        calendar.set(Calendar.SECOND, 0)
+                        calendar.set(Calendar.MILLISECOND, 0)
+                        val dayStart = calendar.timeInMillis
+                        
+                        // Only include sessions that are within our query window and have valid duration
+                        if (sessionStart >= startTime && duration > 0) {
+                            sessions.add(
+                                ScreenTimeSessionEntity(
+                                    packageName = packageName,
+                                    appName = appName,
+                                    date = dayStart,
+                                    startTime = sessionStart,
+                                    endTime = eventTime,
+                                    durationMs = duration
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Handle any remaining active sessions (still running)
+        activeSessions.forEach { (packageName, sessionStart) ->
+            val appName = appNames[packageName] ?: packageName
+            val duration = now - sessionStart
+            
+            if (sessionStart >= startTime && duration > 0) {
+                calendar.timeInMillis = sessionStart
+                calendar.set(Calendar.HOUR_OF_DAY, 0)
+                calendar.set(Calendar.MINUTE, 0)
+                calendar.set(Calendar.SECOND, 0)
+                calendar.set(Calendar.MILLISECOND, 0)
+                val dayStart = calendar.timeInMillis
+                
+                sessions.add(
+                    ScreenTimeSessionEntity(
+                        packageName = packageName,
+                        appName = appName,
+                        date = dayStart,
+                        startTime = sessionStart,
+                        endTime = now,
+                        durationMs = duration
+                    )
+                )
+            }
+        }
+        
+        // Store sessions in database
+        if (sessions.isNotEmpty()) {
+            screenTimeRepository.insertSessions(sessions)
+        }
+        
+        return true
     }
 }
 

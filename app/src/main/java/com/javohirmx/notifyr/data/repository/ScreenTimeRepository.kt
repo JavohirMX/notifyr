@@ -2,6 +2,8 @@ package com.javohirmx.notifyr.data.repository
 
 import com.javohirmx.notifyr.data.database.ScreenTimeDao
 import com.javohirmx.notifyr.data.database.ScreenTimeEntity
+import com.javohirmx.notifyr.data.database.ScreenTimeSessionDao
+import com.javohirmx.notifyr.data.database.ScreenTimeSessionEntity
 import com.javohirmx.notifyr.data.database.toDomain
 import com.javohirmx.notifyr.domain.model.*
 import kotlinx.coroutines.flow.Flow
@@ -10,7 +12,8 @@ import kotlinx.coroutines.flow.map
 import java.util.Calendar
 
 class ScreenTimeRepository(
-    private val screenTimeDao: ScreenTimeDao
+    private val screenTimeDao: ScreenTimeDao,
+    private val screenTimeSessionDao: ScreenTimeSessionDao
 ) {
     
     /**
@@ -123,6 +126,21 @@ class ScreenTimeRepository(
     }
     
     /**
+     * Get all sessions for a specific date, ordered by start time
+     */
+    suspend fun getSessionsByDate(date: Long): List<UsageSession> {
+        val entities = screenTimeSessionDao.getSessionsByDate(date)
+        return entities.map { it.toDomain() }
+    }
+    
+    /**
+     * Insert sessions
+     */
+    suspend fun insertSessions(sessions: List<ScreenTimeSessionEntity>) {
+        screenTimeSessionDao.insertSessions(sessions)
+    }
+    
+    /**
      * Helper function to get day start timestamp (midnight)
      */
     private fun getDayStart(timestamp: Long): Long {
@@ -134,6 +152,19 @@ class ScreenTimeRepository(
         calendar.set(Calendar.MILLISECOND, 0)
         return calendar.timeInMillis
     }
+}
+
+/**
+ * Extension function to convert ScreenTimeSessionEntity to domain model
+ */
+private fun ScreenTimeSessionEntity.toDomain(): UsageSession {
+    return UsageSession(
+        packageName = packageName,
+        appName = appName,
+        startTime = startTime,
+        endTime = endTime,
+        durationMs = durationMs
+    )
 }
 
 /**

@@ -27,6 +27,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.javohirmx.notifyr.domain.model.*
 import com.javohirmx.notifyr.utils.AppIconUtils
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
@@ -100,7 +101,8 @@ fun ScreenTimeScreen(
                         items(uiState.dailyScreenTime) { dailyData ->
                             DailyScreenTimeCard(
                                 dailyScreenTime = dailyData,
-                                context = context
+                                context = context,
+                                viewModel = viewModel
                             )
                         }
                     }
@@ -178,7 +180,8 @@ fun TimeRangeSelector(
 @Composable
 fun DailyScreenTimeCard(
     dailyScreenTime: DailyScreenTime,
-    context: android.content.Context
+    context: android.content.Context,
+    viewModel: ScreenTimeViewModel
 ) {
     var isExpanded by remember { mutableStateOf(false) }
     
@@ -307,8 +310,9 @@ fun DailyScreenTimeCard(
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
                     
-                    HourlyTimelineView(
-                        hourlyData = dailyScreenTime.hourlyData,
+                    SessionTimelineView(
+                        date = dailyScreenTime.date,
+                        viewModel = viewModel,
                         context = context
                     )
                 }
@@ -632,5 +636,207 @@ private fun formatHour(hour: Int): String {
     val hour12 = if (hour == 0) 12 else if (hour > 12) hour - 12 else hour
     val amPm = if (hour < 12) "AM" else "PM"
     return "$hour12 $amPm"
+}
+
+@Composable
+fun SessionTimelineView(
+    date: Long,
+    viewModel: ScreenTimeViewModel,
+    context: android.content.Context
+) {
+    var sessions by remember { mutableStateOf<List<UsageSession>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    
+    LaunchedEffect(date) {
+        isLoading = true
+        sessions = viewModel.loadSessionsForDate(date)
+        isLoading = false
+    }
+    
+    if (isLoading) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+        }
+    } else if (sessions.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = "No usage data for this day",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    } else {
+        // Get day start and end times
+        val calendar = Calendar.getInstance()
+        calendar.timeInMillis = date
+        val dayStart = calendar.timeInMillis
+        calendar.add(Calendar.DAY_OF_YEAR, 1)
+        val dayEnd = calendar.timeInMillis
+        
+        // Create timeline items with gaps
+        val timelineItems = buildTimelineItems(sessions, dayStart, dayEnd)
+        
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            timelineItems.forEach { item ->
+                when (item) {
+                    is TimelineSessionItem -> {
+                        SessionTimelineRow(
+                            session = item.session,
+                            context = context
+                        )
+                    }
+                    is TimelineGapItem -> {
+                        GapTimelineRow(
+                            startTime = item.startTime,
+                            endTime = item.endTime
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+sealed class TimelineItem
+data class TimelineSessionItem(val session: UsageSession) : TimelineItem()
+data class TimelineGapItem(val startTime: Long, val endTime: Long) : TimelineItem()
+
+private fun buildTimelineItems(
+    sessions: List<UsageSession>,
+    dayStart: Long,
+    dayEnd: Long
+): List<TimelineItem> {
+    if (sessions.isEmpty()) {
+        return listOf(TimelineGapItem(dayStart, dayEnd))
+    }
+    
+    val items = mutableListOf<TimelineItem>()
+    val sortedSessions = sessions.sortedBy { it.startTime }
+    
+    // Add gap before first session if needed
+    if (sortedSessions.first().startTime > dayStart) {
+        items.add(TimelineGapItem(dayStart, sortedSessions.first().startTime))
+    }
+    
+    // Add sessions and gaps between them
+    sortedSessions.forEachIndexed { index, session ->
+        items.add(TimelineSessionItem(session))
+        
+        // Add gap after this session if there's a gap before next session
+        if (index < sortedSessions.size - 1) {
+            val nextSession = sortedSessions[index + 1]
+            if (session.endTime < nextSession.startTime) {
+                items.add(TimelineGapItem(session.endTime, nextSession.startTime))
+            }
+        }
+    }
+    
+    // Add gap after last session if needed
+    if (sortedSessions.last().endTime < dayEnd) {
+        items.add(TimelineGapItem(sortedSessions.last().endTime, dayEnd))
+    }
+    
+    return items
+}
+
+@Composable
+fun SessionTimelineRow(
+    session: UsageSession,
+    context: android.content.Context
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            AppIconUtils.AppIconOrPlaceholder(
+                context = context,
+                packageName = session.packageName,
+                appName = session.appName,
+                size = 32.dp
+            )
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = session.getFormattedTimeRange(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = session.appName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            Text(
+                text = session.getFormattedDuration(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+fun GapTimelineRow(
+    startTime: Long,
+    endTime: Long
+) {
+    val duration = endTime - startTime
+    // Only show gaps longer than 1 minute
+    if (duration < 60000) {
+        return
+    }
+    
+    val timeFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+    val startStr = timeFormat.format(java.util.Date(startTime))
+    val endStr = timeFormat.format(java.util.Date(endTime))
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+        )
+        Text(
+            text = "$startStr - $endStr",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier.padding(horizontal = 8.dp)
+        )
+        HorizontalDivider(
+            modifier = Modifier.weight(1f),
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+        )
+    }
 }
 

@@ -3,8 +3,10 @@ package com.javohirmx.notifyr.ui.screentime
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.javohirmx.notifyr.data.repository.ScreenTimeRepository
 import com.javohirmx.notifyr.domain.model.DailyScreenTime
 import com.javohirmx.notifyr.domain.model.ScreenTimeRange
+import com.javohirmx.notifyr.domain.model.UsageSession
 import com.javohirmx.notifyr.domain.usecase.GetScreenTimeUseCase
 import com.javohirmx.notifyr.utils.PermissionUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,7 +19,8 @@ import javax.inject.Inject
 @HiltViewModel
 class ScreenTimeViewModel @Inject constructor(
     application: Application,
-    private val getScreenTimeUseCase: GetScreenTimeUseCase
+    private val getScreenTimeUseCase: GetScreenTimeUseCase,
+    private val screenTimeRepository: ScreenTimeRepository
 ) : AndroidViewModel(application) {
     
     private val _uiState = MutableStateFlow(ScreenTimeUiState())
@@ -70,6 +73,14 @@ class ScreenTimeViewModel @Inject constructor(
     
     fun refresh() {
         loadScreenTime(_uiState.value.selectedRange)
+    }
+    
+    suspend fun loadSessionsForDate(date: Long): List<UsageSession> {
+        return try {
+            screenTimeRepository.getSessionsByDate(date)
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 }
 

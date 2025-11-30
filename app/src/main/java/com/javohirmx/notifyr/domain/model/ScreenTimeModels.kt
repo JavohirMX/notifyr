@@ -120,6 +120,30 @@ enum class ScreenTimeRange {
 }
 
 /**
+ * Represents a single usage session with exact start and end times
+ */
+@Serializable
+data class UsageSession(
+    val packageName: String,
+    val appName: String,
+    val startTime: Long, // Session start timestamp in milliseconds
+    val endTime: Long, // Session end timestamp in milliseconds
+    val durationMs: Long // Duration in milliseconds
+) {
+    fun getFormattedTimeRange(): String {
+        val startFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+        val endFormat = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
+        val start = startFormat.format(java.util.Date(startTime))
+        val end = endFormat.format(java.util.Date(endTime))
+        return "$start to $end"
+    }
+    
+    fun getFormattedDuration(): String {
+        return formatDuration(durationMs)
+    }
+}
+
+/**
  * Helper function to format duration in milliseconds to human-readable string
  */
 fun formatDuration(durationMs: Long): String {

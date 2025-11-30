@@ -8,8 +8,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import android.content.Context
 
 @Database(
-    entities = [NotificationEntity::class, ScreenTimeEntity::class, CustomTagEntity::class],
-    version = 5,
+    entities = [NotificationEntity::class, ScreenTimeEntity::class, CustomTagEntity::class, ScreenTimeSessionEntity::class],
+    version = 6,
     exportSchema = false
 )
 abstract class NotifyrDatabase : RoomDatabase() {
@@ -17,6 +17,7 @@ abstract class NotifyrDatabase : RoomDatabase() {
     abstract fun notificationDao(): NotificationDao
     abstract fun screenTimeDao(): ScreenTimeDao
     abstract fun customTagDao(): CustomTagDao
+    abstract fun screenTimeSessionDao(): ScreenTimeSessionDao
     
     companion object {
         const val DATABASE_NAME = "notifyr_database"
@@ -120,6 +121,44 @@ abstract class NotifyrDatabase : RoomDatabase() {
                 // Create unique index on name
                 database.execSQL(
                     "CREATE UNIQUE INDEX IF NOT EXISTS index_custom_tags_name ON custom_tags(name)"
+                )
+            }
+        }
+        
+        /**
+         * Migration from version 5 to 6
+         * Adds: Screen time sessions table for minute-level precision
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Create screen_time_sessions table
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS screen_time_sessions (
+                        packageName TEXT NOT NULL,
+                        appName TEXT NOT NULL,
+                        date INTEGER NOT NULL,
+                        startTime INTEGER NOT NULL,
+                        endTime INTEGER NOT NULL,
+                        durationMs INTEGER NOT NULL,
+                        PRIMARY KEY(packageName, startTime)
+                    )
+                """)
+                
+                // Create indices
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_screen_time_sessions_date ON screen_time_sessions(date)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_screen_time_sessions_packageName ON screen_time_sessions(packageName)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_screen_time_sessions_date_packageName ON screen_time_sessions(date, packageName)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_screen_time_sessions_startTime ON screen_time_sessions(startTime)"
+                )
+                database.execSQL(
+                    "CREATE INDEX IF NOT EXISTS index_screen_time_sessions_endTime ON screen_time_sessions(endTime)"
                 )
             }
         }
