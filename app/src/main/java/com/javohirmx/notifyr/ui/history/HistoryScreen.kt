@@ -2,6 +2,7 @@ package com.javohirmx.notifyr.ui.history
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.Image
@@ -58,6 +59,8 @@ import kotlinx.coroutines.launch
 import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
+import java.util.Calendar
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -323,6 +326,30 @@ fun SearchBar(
 }
 
 @Composable
+private fun DateGroupHeader(dateGroup: DateGroup) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 3.dp,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = dateGroup.displayName,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
+@Composable
 fun NotificationList(
     notifications: List<NotificationItem>,
     importance: NotificationImportance,
@@ -436,40 +463,52 @@ fun NotificationList(
                     }
                 }
                 
-                // Notification List
+                // Notification List with Date Grouping
+                val dateGroupedNotifications = remember(notifications) {
+                    groupNotificationsByDate(notifications)
+                }
+                
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    items(
-                        items = notifications,
-                        key = { item ->
-                            when (item) {
-                                is NotificationItem.Single -> "single_${item.notification.id}"
-                                is NotificationItem.Group -> "group_${item.group.packageName}_${item.group.firstTimestamp}"
-                            }
+                    dateGroupedNotifications.forEach { dateGroup ->
+                        // Sticky header for date group
+                        item(key = "header_${dateGroup.group.name}") {
+                            DateGroupHeader(dateGroup.group)
                         }
-                    ) { item ->
-                        when (item) {
-                            is NotificationItem.Single -> {
-                                NotificationHistoryCard(
-                                    notification = item.notification,
-                                    onMarkAsRead = { onMarkAsRead(item.notification) },
-                                    onDelete = { onDelete(item.notification) },
-                                    onSetAppRule = onSetAppRule,
-                                    onImportanceChange = onImportanceChange,
-                                    onTagsChange = onTagsChange
-                                )
+                        
+                        // Items in this date group
+                        items(
+                            items = dateGroup.items,
+                            key = { item ->
+                                when (item) {
+                                    is NotificationItem.Single -> "single_${item.notification.id}"
+                                    is NotificationItem.Group -> "group_${item.group.packageName}_${item.group.firstTimestamp}"
+                                }
                             }
-                            is NotificationItem.Group -> {
-                                NotificationGroupCard(
-                                    group = item.group,
-                                    onMarkAllAsRead = { onMarkGroupAsRead(item.group) },
-                                    onDeleteAll = { onDeleteGroup(item.group) },
-                                    onMarkSingleAsRead = onMarkAsRead,
-                                    onDeleteSingle = onDelete
-                                )
+                        ) { item ->
+                            when (item) {
+                                is NotificationItem.Single -> {
+                                    NotificationHistoryCard(
+                                        notification = item.notification,
+                                        onMarkAsRead = { onMarkAsRead(item.notification) },
+                                        onDelete = { onDelete(item.notification) },
+                                        onSetAppRule = onSetAppRule,
+                                        onImportanceChange = onImportanceChange,
+                                        onTagsChange = onTagsChange
+                                    )
+                                }
+                                is NotificationItem.Group -> {
+                                    NotificationGroupCard(
+                                        group = item.group,
+                                        onMarkAllAsRead = { onMarkGroupAsRead(item.group) },
+                                        onDeleteAll = { onDeleteGroup(item.group) },
+                                        onMarkSingleAsRead = onMarkAsRead,
+                                        onDeleteSingle = onDelete
+                                    )
+                                }
                             }
                         }
                     }
@@ -512,16 +551,16 @@ fun NotificationGroupCard(
             .fillMaxWidth()
             .animateContentSize(),
         elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = 3.dp
+            defaultElevation = if (group.isAllRead) 1.dp else 3.dp
         ),
         colors = CardDefaults.elevatedCardColors(
             containerColor = if (group.isAllRead) {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
             } else {
                 MaterialTheme.colorScheme.surface
             }
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier
@@ -710,12 +749,12 @@ private fun GroupedNotificationItem(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = if (notification.isRead) {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
         } else {
             MaterialTheme.colorScheme.surface
         },
-        shape = RoundedCornerShape(8.dp),
-        tonalElevation = 1.dp
+        shape = RoundedCornerShape(12.dp),
+        tonalElevation = if (notification.isRead) 0.dp else 1.dp
     ) {
         Column(
             modifier = Modifier
@@ -848,31 +887,45 @@ fun NotificationHistoryCard(
     var showImportanceMenu by remember { mutableStateOf(false) }
     var showTagEditDialog by remember { mutableStateOf(false) }
     
+    // For read notifications, start collapsed; for unread, always expanded
+    var isExpanded by remember(notification.isRead) { 
+        mutableStateOf(!notification.isRead) 
+    }
+    
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
             .animateContentSize(),
         elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = 2.dp
+            defaultElevation = if (notification.isRead) 1.dp else 3.dp
         ),
         colors = CardDefaults.elevatedCardColors(
             containerColor = if (notification.isRead) {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
             } else {
                 MaterialTheme.colorScheme.surface
             }
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(16.dp)
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onOpenApp)
-                .padding(16.dp)
+                .padding(if (notification.isRead && !isExpanded) 12.dp else 16.dp)
         ) {
-            // Header with app icon, name and timestamp
+            // Header with app icon, name and timestamp - clickable to expand/collapse for read notifications
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        onClick = {
+                            if (notification.isRead) {
+                                isExpanded = !isExpanded
+                            } else {
+                                onOpenApp()
+                            }
+                        }
+                    ),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -886,9 +939,9 @@ fun NotificationHistoryCard(
                             context = context,
                             packageName = notification.packageName,
                             appName = notification.appName,
-                            size = 40.dp,
+                            size = if (notification.isRead && !isExpanded) 32.dp else 40.dp,
                             modifier = Modifier
-                                .size(40.dp)
+                                .size(if (notification.isRead && !isExpanded) 32.dp else 40.dp)
                                 .clip(RoundedCornerShape(8.dp))
                         )
                         // Unread indicator dot
@@ -911,9 +964,17 @@ fun NotificationHistoryCard(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = notification.appName,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.SemiBold,
+                            style = if (notification.isRead && !isExpanded) {
+                                MaterialTheme.typography.bodyMedium
+                            } else {
+                                MaterialTheme.typography.labelLarge
+                            },
+                            color = if (notification.isRead) {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                            fontWeight = if (notification.isRead) FontWeight.Normal else FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -921,226 +982,245 @@ fun NotificationHistoryCard(
                         Text(
                             text = formatTimestamp(notification.timestamp),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-            
-            // Content section
-            if (notification.title.isNotBlank() || notification.text.isNotBlank()) {
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    // Title
-                    if (notification.title.isNotBlank()) {
-                        Text(
-                            text = notification.title,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (notification.isRead) {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    
-                    // Content
-                    if (notification.text.isNotBlank()) {
-                        Text(
-                            text = notification.text,
-                            style = MaterialTheme.typography.bodyMedium,
                             color = if (notification.isRead) {
                                 MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis
+                            }
                         )
                     }
                 }
-            }
-            
-            // Tags and metadata
-            val hasCustomTags = notification.tags.customTags.isNotEmpty() || notification.tags.globalTagIds.isNotEmpty()
-            if (hasCustomTags || 
-                notification.tags.timeSensitivity == com.javohirmx.notifyr.domain.model.TimeSensitivity.IMMEDIATE) {
-                Spacer(modifier = Modifier.height(12.dp))
                 
-                @OptIn(ExperimentalLayoutApi::class)
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    // Custom tags chips
-                    notification.tags.customTags.take(5).forEach { tag ->
-                        AssistChip(
-                            onClick = { },
-                            label = { 
-                                Text(
-                                    text = tag,
-                                    style = MaterialTheme.typography.labelSmall
-                                ) 
-                            },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
-                            ),
-                            border = null,
-                            modifier = Modifier.height(28.dp)
-                        )
-                    }
-                    
-                    // Global tags (we'll need to load them, but for now show IDs)
-                    // Note: In a real implementation, you'd load global tags from repository
-                    // For now, we'll just show a placeholder or skip them in the card
-                    
-                    // Time sensitivity indicator
-                    if (notification.tags.timeSensitivity == com.javohirmx.notifyr.domain.model.TimeSensitivity.IMMEDIATE) {
-                        AssistChip(
-                            onClick = { },
-                            label = { 
-                                Text(
-                                    text = "Urgent",
-                                    style = MaterialTheme.typography.labelSmall
-                                ) 
-                            },
-                            leadingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Warning,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            },
-                            colors = AssistChipDefaults.assistChipColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
-                            ),
-                            border = null,
-                            modifier = Modifier.height(28.dp)
-                        )
-                    }
+                // Expand/collapse indicator for read notifications
+                if (notification.isRead) {
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (isExpanded) "Collapse" else "Expand",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
             
-            // Action buttons
-            Spacer(modifier = Modifier.height(8.dp))
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-            
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            // Expandable content section (only show when expanded for read notifications, always show for unread)
+            AnimatedVisibility(
+                visible = !notification.isRead || isExpanded,
+                enter = expandVertically(animationSpec = tween(300)) + fadeIn(animationSpec = tween(300)),
+                exit = shrinkVertically(animationSpec = tween(300)) + fadeOut(animationSpec = tween(300))
             ) {
-                // App rule and importance buttons (left side)
-                Row {
-                    if (onSetAppRule != null) {
-                        IconButton(
-                            onClick = { showAppRuleMenu = true }
+                Column {
+                    // Content section
+                    if (notification.title.isNotBlank() || notification.text.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = "App Rule",
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                    
-                    // Importance change button
-                    if (onImportanceChange != null) {
-                        Box {
-                            IconButton(
-                                onClick = { showImportanceMenu = true }
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = "Change Importance",
-                                    modifier = Modifier.size(20.dp)
+                            // Title
+                            if (notification.title.isNotBlank()) {
+                                Text(
+                                    text = notification.title,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (notification.isRead) {
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    },
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                             
-                            DropdownMenu(
-                                expanded = showImportanceMenu,
-                                onDismissRequest = { showImportanceMenu = false }
-                            ) {
-                                // Show options for all importance levels except current
-                                NotificationImportance.values().forEach { importance ->
-                                    if (importance != notification.importance) {
-                                        DropdownMenuItem(
-                                            text = { 
-                                                Text(
-                                                    when (importance) {
-                                                        NotificationImportance.URGENT -> "Mark as Urgent"
-                                                        NotificationImportance.NORMAL -> "Mark as Normal"
-                                                        NotificationImportance.IGNORE -> "Mark as Ignore"
-                                                    }
-                                                )
-                                            },
-                                            onClick = {
-                                                showImportanceMenu = false
-                                                onImportanceChange(notification, importance)
-                                            },
-                                            leadingIcon = {
-                                                Icon(
-                                                    imageVector = when (importance) {
-                                                        NotificationImportance.URGENT -> Icons.Default.Warning
-                                                        NotificationImportance.NORMAL -> Icons.Default.Notifications
-                                                        NotificationImportance.IGNORE -> Icons.Default.Close
-                                                    },
-                                                    contentDescription = null
-                                                )
-                                            }
-                                        )
-                                    }
-                                }
+                            // Content
+                            if (notification.text.isNotBlank()) {
+                                Text(
+                                    text = notification.text,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (notification.isRead) {
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
                     }
                     
-                    // Tag edit button
-                    if (onTagsChange != null) {
-                        IconButton(
-                            onClick = { showTagEditDialog = true }
+                    // Tags and metadata
+                    val hasCustomTags = notification.tags.customTags.isNotEmpty() || notification.tags.globalTagIds.isNotEmpty()
+                    if (hasCustomTags || 
+                        notification.tags.timeSensitivity == com.javohirmx.notifyr.domain.model.TimeSensitivity.IMMEDIATE) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        
+                        @OptIn(ExperimentalLayoutApi::class)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Info,
-                                contentDescription = "Edit Tags",
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
-                
-                Spacer(modifier = Modifier.weight(1f))
-                
-                // Mark read and delete buttons (right side)
-                Row {
-                    if (!notification.isRead) {
-                        IconButton(
-                            onClick = onMarkAsRead
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = "Mark read",
-                                modifier = Modifier.size(20.dp)
-                            )
+                            // Custom tags chips
+                            notification.tags.customTags.take(5).forEach { tag ->
+                                AssistChip(
+                                    onClick = { },
+                                    label = { 
+                                        Text(
+                                            text = tag,
+                                            style = MaterialTheme.typography.labelSmall
+                                        ) 
+                                    },
+                                    colors = AssistChipDefaults.assistChipColors(
+                                        containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f)
+                                    ),
+                                    border = null,
+                                    modifier = Modifier.height(28.dp)
+                                )
+                            }
+                            
+                            // Time sensitivity indicator
+                            if (notification.tags.timeSensitivity == com.javohirmx.notifyr.domain.model.TimeSensitivity.IMMEDIATE) {
+                                AssistChip(
+                                    onClick = { },
+                                    label = { 
+                                        Text(
+                                            text = "Urgent",
+                                            style = MaterialTheme.typography.labelSmall
+                                        ) 
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Warning,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    },
+                                    colors = AssistChipDefaults.assistChipColors(
+                                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.5f)
+                                    ),
+                                    border = null,
+                                    modifier = Modifier.height(28.dp)
+                                )
+                            }
                         }
                     }
                     
-                    IconButton(
-                        onClick = onDelete
+                    // Action buttons
+                    Spacer(modifier = Modifier.height(8.dp))
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Delete",
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colorScheme.error
-                        )
+                        // App rule and importance buttons (left side)
+                        Row {
+                            if (onSetAppRule != null) {
+                                IconButton(
+                                    onClick = { showAppRuleMenu = true }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Settings,
+                                        contentDescription = "App Rule",
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            
+                            // Importance change button
+                            if (onImportanceChange != null) {
+                                Box {
+                                    IconButton(
+                                        onClick = { showImportanceMenu = true }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = "Change Importance",
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    
+                                    DropdownMenu(
+                                        expanded = showImportanceMenu,
+                                        onDismissRequest = { showImportanceMenu = false }
+                                    ) {
+                                        // Show options for all importance levels except current
+                                        NotificationImportance.values().forEach { importance ->
+                                            if (importance != notification.importance) {
+                                                DropdownMenuItem(
+                                                    text = { 
+                                                        Text(
+                                                            when (importance) {
+                                                                NotificationImportance.URGENT -> "Mark as Urgent"
+                                                                NotificationImportance.NORMAL -> "Mark as Normal"
+                                                                NotificationImportance.IGNORE -> "Mark as Ignore"
+                                                            }
+                                                        )
+                                                    },
+                                                    onClick = {
+                                                        showImportanceMenu = false
+                                                        onImportanceChange(notification, importance)
+                                                    },
+                                                    leadingIcon = {
+                                                        Icon(
+                                                            imageVector = when (importance) {
+                                                                NotificationImportance.URGENT -> Icons.Default.Warning
+                                                                NotificationImportance.NORMAL -> Icons.Default.Notifications
+                                                                NotificationImportance.IGNORE -> Icons.Default.Close
+                                                            },
+                                                            contentDescription = null
+                                                        )
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Tag edit button
+                            if (onTagsChange != null) {
+                                IconButton(
+                                    onClick = { showTagEditDialog = true }
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = "Edit Tags",
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                        
+                        Spacer(modifier = Modifier.weight(1f))
+                        
+                        // Mark read and delete buttons (right side)
+                        Row {
+                            if (!notification.isRead) {
+                                IconButton(
+                                    onClick = onMarkAsRead
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = "Mark read",
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            
+                            IconButton(
+                                onClick = onDelete
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = "Delete",
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -1245,6 +1325,90 @@ private fun getImportanceColor(importance: NotificationImportance): androidx.com
         NotificationImportance.URGENT -> MaterialTheme.colorScheme.error
         NotificationImportance.NORMAL -> MaterialTheme.colorScheme.primary
         NotificationImportance.IGNORE -> MaterialTheme.colorScheme.outline
+    }
+}
+
+/**
+ * Represents a date group for notifications
+ */
+enum class DateGroup(val displayName: String) {
+    TODAY("Today"),
+    YESTERDAY("Yesterday"),
+    THIS_WEEK("This Week"),
+    OLDER("Older")
+}
+
+/**
+ * Data class to represent a date-grouped list of notifications
+ */
+data class DateGroupedNotifications(
+    val group: DateGroup,
+    val items: List<NotificationItem>
+)
+
+/**
+ * Get the date group for a given timestamp
+ */
+private fun getDateGroup(timestamp: Long): DateGroup {
+    val now = System.currentTimeMillis()
+    val calendar = Calendar.getInstance()
+    calendar.timeInMillis = now
+    
+    // Start of today
+    calendar.set(Calendar.HOUR_OF_DAY, 0)
+    calendar.set(Calendar.MINUTE, 0)
+    calendar.set(Calendar.SECOND, 0)
+    calendar.set(Calendar.MILLISECOND, 0)
+    val startOfToday = calendar.timeInMillis
+    
+    // Start of yesterday
+    calendar.add(Calendar.DAY_OF_YEAR, -1)
+    val startOfYesterday = calendar.timeInMillis
+    
+    // Start of this week (Monday)
+    calendar.timeInMillis = now
+    calendar.set(Calendar.HOUR_OF_DAY, 0)
+    calendar.set(Calendar.MINUTE, 0)
+    calendar.set(Calendar.SECOND, 0)
+    calendar.set(Calendar.MILLISECOND, 0)
+    val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
+    val daysFromMonday = (dayOfWeek + 5) % 7 // Convert to Monday = 0
+    calendar.add(Calendar.DAY_OF_YEAR, -daysFromMonday)
+    val startOfWeek = calendar.timeInMillis
+    
+    return when {
+        timestamp >= startOfToday -> DateGroup.TODAY
+        timestamp >= startOfYesterday -> DateGroup.YESTERDAY
+        timestamp >= startOfWeek -> DateGroup.THIS_WEEK
+        else -> DateGroup.OLDER
+    }
+}
+
+/**
+ * Group notifications by date
+ */
+private fun groupNotificationsByDate(notifications: List<NotificationItem>): List<DateGroupedNotifications> {
+    val grouped = mutableMapOf<DateGroup, MutableList<NotificationItem>>()
+    
+    notifications.forEach { item ->
+        val timestamp = when (item) {
+            is NotificationItem.Single -> item.notification.timestamp
+            is NotificationItem.Group -> item.group.lastTimestamp
+        }
+        val group = getDateGroup(timestamp)
+        grouped.getOrPut(group) { mutableListOf() }.add(item)
+    }
+    
+    // Return in order: Today, Yesterday, This Week, Older
+    return listOf(
+        DateGroup.TODAY,
+        DateGroup.YESTERDAY,
+        DateGroup.THIS_WEEK,
+        DateGroup.OLDER
+    ).mapNotNull { group ->
+        grouped[group]?.let { items ->
+            DateGroupedNotifications(group, items)
+        }
     }
 }
 
