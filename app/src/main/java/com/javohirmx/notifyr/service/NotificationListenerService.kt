@@ -12,7 +12,6 @@ import com.javohirmx.notifyr.domain.model.NotificationImportance
 import com.javohirmx.notifyr.domain.model.shouldShowImmediately
 import com.javohirmx.notifyr.domain.rules.EnhancedNotificationRulesEngine
 import com.javohirmx.notifyr.domain.rules.NotificationRulesEngine
-import com.javohirmx.notifyr.domain.util.EmailAppDetector
 import com.javohirmx.notifyr.widget.WidgetUpdateHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -158,9 +157,8 @@ class NotificationListenerService : NotificationListenerService() {
             val enhancedData = enhancedRulesEngine.classifyNotificationWithTags(baseNotificationData)
             
             serviceScope.launch {
-                // Use centralized EmailAppDetector for deduplication window
-                val dedupWindow = EmailAppDetector.getDedupWindow(packageName)
-                notificationRepository.upsertWithDedup(enhancedData, dedupWindow)
+                // Use standard deduplication window (60 seconds)
+                notificationRepository.upsertWithDedup(enhancedData, 60_000L)
             }
             return // Don't process further - let original notification through
         }
@@ -204,13 +202,11 @@ class NotificationListenerService : NotificationListenerService() {
         val currentFocusMode = focusModeManager.getCurrentMode()
         val allowedByFocusMode = focusModeManager.shouldShowNotification(enhancedNotification, currentFocusMode)
         
-        // Deduplication window - increased for normal notifications to catch more duplicates
-        // Use centralized EmailAppDetector for consistency
+        // Unified deduplication window based on notification type
         val dedupWindowMs = when {
-            isCall -> 15_000L
-            isOngoing || isMedia -> 60_000L
-            EmailAppDetector.isEmailApp(packageName) -> EmailAppDetector.getDedupWindow(packageName)
-            else -> 30_000L  // 30 seconds for other apps
+            isCall -> 15_000L  // 15 seconds for calls (rapid updates)
+            isOngoing || isMedia -> 60_000L  // 1 minute for ongoing/media (status updates)
+            else -> 60_000L  // 60 seconds for all other notifications
         }
         
         // Store with deduplication

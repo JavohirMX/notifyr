@@ -5,15 +5,12 @@ import com.javohirmx.notifyr.data.database.toEntity
 import com.javohirmx.notifyr.data.database.toDomain
 import com.javohirmx.notifyr.domain.model.NotificationData
 import com.javohirmx.notifyr.domain.model.NotificationImportance
-import com.javohirmx.notifyr.domain.util.EmailAppDetector
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.text.Normalizer
-import kotlin.math.abs
 import kotlin.math.max
-import kotlin.math.min
 
 class NotificationRepository(
     private val notificationDao: NotificationDao
@@ -66,7 +63,6 @@ class NotificationRepository(
     /**
      * Normalizes text for duplicate comparison by trimming whitespace,
      * handling empty/null strings consistently, and applying Unicode normalization.
-     * Also removes common Gmail notification suffixes like timestamps.
      */
     private fun normalizeText(text: String?): String {
         if (text == null) return ""
@@ -76,21 +72,12 @@ class NotificationRepository(
         // Apply Unicode normalization (NFD -> NFC) to handle composed vs decomposed characters
         normalized = Normalizer.normalize(normalized, Normalizer.Form.NFC)
         
-        // Remove common Gmail notification patterns that can cause false duplicates
-        // Gmail sometimes adds timestamps or other metadata
+        // Normalize whitespace
         normalized = normalized
             .replace(Regex("\\s+"), " ") // Normalize whitespace
             .trim()
         
         return normalized
-    }
-    
-    /**
-     * Checks if a package is an email app that benefits from conversationId-based deduplication
-     * Uses centralized EmailAppDetector for consistency
-     */
-    private fun isEmailApp(packageName: String): Boolean {
-        return EmailAppDetector.isEmailApp(packageName)
     }
 
     /**
@@ -103,6 +90,15 @@ class NotificationRepository(
                 normalizeText(notification1.text) == normalizeText(notification2.text)
     }
 
+    /**
+     * Unified deduplication that works for all apps.
+     * Priority order:
+     * 1. conversationId match (if available) - works for messaging/email apps
+     * 2. sender + title/text match (if available) - works for messaging/email apps
+     * 3. Exact packageName + title + text match (fast path)
+     * 4. Normalized packageName + title + text match (handles whitespace differences)
+     * 5. Empty notification matching (packageName + category + timestamp proximity)
+     */
     suspend fun findRecentDuplicate(
         packageName: String,
         title: String,
@@ -111,87 +107,51 @@ class NotificationRepository(
         conversationId: String? = null,
         sender: String? = null
     ): NotificationData? {
-        // For email apps, prioritize conversationId/sender-based matching
-        if (isEmailApp(packageName)) {
-            // Try conversationId first (most reliable for email apps)
-            if (conversationId != null && conversationId.isNotEmpty()) {
-                val convMatch = notificationDao.findRecentDuplicateByConversationId(packageName, conversationId, since)
-                if (convMatch != null) {
-                    return convMatch.toDomain()
-                }
+        // Priority 1: Try conversationId match (works for messaging/email apps)
+        if (conversationId != null && conversationId.isNotEmpty()) {
+            val convMatch = notificationDao.findRecentDuplicateByConversationId(packageName, conversationId, since)
+            if (convMatch != null) {
+                return convMatch.toDomain()
             }
-            
-            // Try sender-based matching for email apps
-            if (sender != null && sender.isNotEmpty()) {
-                val senderMatch = notificationDao.findRecentDuplicateBySender(packageName, sender, since)
-                if (senderMatch != null) {
-                    // Additional check: ensure title/text are similar (not just same sender)
-                    val normalizedTitle = normalizeText(title)
-                    val normalizedText = normalizeText(text)
-                    val existing = senderMatch.toDomain()
-                    val existingNormalizedTitle = normalizeText(existing.title)
-                    val existingNormalizedText = normalizeText(existing.text)
-                    
-                    // Improved matching: Use exact match or high similarity threshold
-                    // Only use substring matching if one string is significantly shorter (likely a prefix)
-                    val titleMatches = when {
-                        normalizedTitle == existingNormalizedTitle -> true
-                        normalizedTitle.isEmpty() || existingNormalizedTitle.isEmpty() -> false
-                        else -> {
-                            // Only match if one is a clear prefix of the other (length difference > 30%)
-                            val lengthDiff = abs(normalizedTitle.length - existingNormalizedTitle.length)
-                            val minLength = min(normalizedTitle.length, existingNormalizedTitle.length)
-                            if (minLength > 0 && lengthDiff.toDouble() / minLength > 0.3) {
-                                // Significant length difference, check if shorter is prefix
-                                val shorter = if (normalizedTitle.length < existingNormalizedTitle.length) normalizedTitle else existingNormalizedTitle
-                                val longer = if (normalizedTitle.length >= existingNormalizedTitle.length) normalizedTitle else existingNormalizedTitle
-                                longer.startsWith(shorter, ignoreCase = true)
-                            } else {
-                                false
-                            }
-                        }
-                    }
-                    
-                    val textMatches = when {
-                        normalizedText == existingNormalizedText -> true
-                        normalizedText.isEmpty() || existingNormalizedText.isEmpty() -> false
-                        else -> {
-                            // Similar logic for text
-                            val lengthDiff = abs(normalizedText.length - existingNormalizedText.length)
-                            val minLength = min(normalizedText.length, existingNormalizedText.length)
-                            if (minLength > 0 && lengthDiff.toDouble() / minLength > 0.3) {
-                                val shorter = if (normalizedText.length < existingNormalizedText.length) normalizedText else existingNormalizedText
-                                val longer = if (normalizedText.length >= existingNormalizedText.length) normalizedText else existingNormalizedText
-                                longer.startsWith(shorter, ignoreCase = true)
-                            } else {
-                                false
-                            }
-                        }
-                    }
-                    
-                    // If both title and text match (or one is empty and the other matches), it's a duplicate
-                    if (titleMatches && (normalizedText.isEmpty() || existingNormalizedText.isEmpty() || textMatches)) {
-                        return existing
-                    }
+        }
+        
+        // Priority 2: Try sender-based matching (works for messaging/email apps)
+        // Only if sender is available and we also check title/text similarity
+        if (sender != null && sender.isNotEmpty()) {
+            val senderMatch = notificationDao.findRecentDuplicateBySender(packageName, sender, since)
+            if (senderMatch != null) {
+                val normalizedTitle = normalizeText(title)
+                val normalizedText = normalizeText(text)
+                val existing = senderMatch.toDomain()
+                val existingNormalizedTitle = normalizeText(existing.title)
+                val existingNormalizedText = normalizeText(existing.text)
+                
+                // Require title and text to match (exact or normalized)
+                val titleMatches = normalizedTitle == existingNormalizedTitle
+                val textMatches = normalizedText == existingNormalizedText
+                
+                // If both match, it's a duplicate
+                if (titleMatches && textMatches) {
+                    return existing
                 }
             }
         }
         
-        // First try exact match (fast path)
+        // Priority 3: Try exact match (fast path)
         val exactMatch = notificationDao.findRecentDuplicate(packageName, title, text, since)
         if (exactMatch != null) {
             return exactMatch.toDomain()
         }
         
-        // If no exact match, check for normalized matches within the same package
+        // Priority 4: Check for normalized matches within the same package
         // This handles cases where there might be whitespace differences
         val normalizedTitle = normalizeText(title)
         val normalizedText = normalizeText(text)
         
-        // Handle empty notifications: use packageName + category + timestamp proximity
+        // Handle empty notifications: use packageName + timestamp proximity
         if (normalizedTitle.isEmpty() && normalizedText.isEmpty()) {
             // For empty notifications, check if there's a recent notification from same package
-            // with same category within a very short window (5 seconds)
+            // within a very short window (5 seconds)
             val veryRecentCutoff = since.coerceAtLeast(System.currentTimeMillis() - 5_000L)
             val recentEmpty = notificationDao.findRecentNotificationsByPackage(packageName, veryRecentCutoff)
                 .map { it.toDomain() }
