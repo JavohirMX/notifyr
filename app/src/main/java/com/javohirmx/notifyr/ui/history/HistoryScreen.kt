@@ -546,32 +546,25 @@ fun NotificationGroupCard(
         }
     }
     
-    ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(),
-        elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = if (group.isAllRead) 1.dp else 3.dp
-        ),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = if (group.isAllRead) {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-        ),
-        shape = RoundedCornerShape(16.dp)
-    ) {
+    // Helper composable for group card content
+    @Composable
+    fun GroupCardContent() {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Group Header - Clickable to expand/collapse
+            // Group Header - Clickable to expand/collapse or open app
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { isExpanded = !isExpanded },
+                    .clickable { 
+                        if (group.isAllRead) {
+                            onOpenApp()
+                        } else {
+                            isExpanded = !isExpanded
+                        }
+                    },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -615,8 +608,12 @@ fun NotificationGroupCard(
                             Text(
                                 text = group.appName,
                                 style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                fontWeight = FontWeight.Bold,
+                                color = if (group.isAllRead) {
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                                fontWeight = if (group.isAllRead) FontWeight.Normal else FontWeight.Bold,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -648,7 +645,11 @@ fun NotificationGroupCard(
                         Text(
                             text = formatTimestamp(group.lastTimestamp) + " - " + formatTimestamp(group.firstTimestamp),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = if (group.isAllRead) {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
                         )
                     }
                 }
@@ -657,7 +658,11 @@ fun NotificationGroupCard(
                 Icon(
                     imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                     contentDescription = if (isExpanded) "Collapse" else "Expand",
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = if (group.isAllRead) {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    }
                 )
             }
             
@@ -736,6 +741,38 @@ fun NotificationGroupCard(
                     }
                 }
             }
+        }
+    }
+    
+    // Use Card for read groups (no elevation), ElevatedCard for unread
+    if (group.isAllRead) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenApp)
+                .animateContentSize(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            ),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            GroupCardContent()
+        }
+    } else {
+        ElevatedCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenApp)
+                .animateContentSize(),
+            elevation = CardDefaults.elevatedCardElevation(
+                defaultElevation = 3.dp
+            ),
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            GroupCardContent()
         }
     }
 }
