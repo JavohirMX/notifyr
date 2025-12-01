@@ -506,7 +506,10 @@ fun NotificationList(
                                         onMarkAllAsRead = { onMarkGroupAsRead(item.group) },
                                         onDeleteAll = { onDeleteGroup(item.group) },
                                         onMarkSingleAsRead = onMarkAsRead,
-                                        onDeleteSingle = onDelete
+                                        onDeleteSingle = onDelete,
+                                        onSetAppRule = onSetAppRule,
+                                        onImportanceChange = onImportanceChange,
+                                        onTagsChange = onTagsChange
                                     )
                                 }
                             }
@@ -525,11 +528,17 @@ fun NotificationGroupCard(
     onMarkAllAsRead: () -> Unit,
     onDeleteAll: () -> Unit,
     onMarkSingleAsRead: (NotificationData) -> Unit,
-    onDeleteSingle: (NotificationData) -> Unit
+    onDeleteSingle: (NotificationData) -> Unit,
+    onSetAppRule: ((String, String) -> Unit)? = null,
+    onImportanceChange: ((NotificationData, NotificationImportance) -> Unit)? = null,
+    onTagsChange: ((NotificationData, NotificationTags) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val packageManager = context.packageManager
     var isExpanded by remember { mutableStateOf(false) }
+    var showAppRuleMenu by remember { mutableStateOf(false) }
+    var showImportanceMenu by remember { mutableStateOf(false) }
+    var showTagEditDialog by remember { mutableStateOf(false) }
     
     val onOpenApp = remember(group.packageName) {
         {
@@ -675,16 +684,89 @@ fun NotificationGroupCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Open App button (left side)
-                IconButton(
-                    onClick = onOpenApp
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowForward,
-                        contentDescription = "Open App",
-                        modifier = Modifier.size(20.dp)
-                    )
+                // App rule, importance, and tags buttons (left side)
+                Row {
+                    if (onSetAppRule != null) {
+                        IconButton(
+                            onClick = { showAppRuleMenu = true }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "App Rule",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                    
+                    // Importance change button
+                    if (onImportanceChange != null) {
+                        Box {
+                            IconButton(
+                                onClick = { showImportanceMenu = true }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Change Importance",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            
+                            DropdownMenu(
+                                expanded = showImportanceMenu,
+                                onDismissRequest = { showImportanceMenu = false }
+                            ) {
+                                // Show options for all importance levels except current
+                                NotificationImportance.values().forEach { importance ->
+                                    if (importance != group.importance) {
+                                        DropdownMenuItem(
+                                            text = { 
+                                                Text(
+                                                    when (importance) {
+                                                        NotificationImportance.URGENT -> "Mark as Urgent"
+                                                        NotificationImportance.NORMAL -> "Mark as Normal"
+                                                        NotificationImportance.IGNORE -> "Mark as Ignore"
+                                                    }
+                                                )
+                                            },
+                                            onClick = {
+                                                showImportanceMenu = false
+                                                // Apply to all notifications in the group
+                                                group.notifications.forEach { notification ->
+                                                    onImportanceChange(notification, importance)
+                                                }
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = when (importance) {
+                                                        NotificationImportance.URGENT -> Icons.Default.Warning
+                                                        NotificationImportance.NORMAL -> Icons.Default.Notifications
+                                                        NotificationImportance.IGNORE -> Icons.Default.Close
+                                                    },
+                                                    contentDescription = null
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Tag edit button
+                    if (onTagsChange != null) {
+                        IconButton(
+                            onClick = { showTagEditDialog = true }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = "Edit Tags",
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
                 }
+                
+                Spacer(modifier = Modifier.weight(1f))
                 
                 // Mark read and delete buttons (right side)
                 Row {
@@ -773,6 +855,44 @@ fun NotificationGroupCard(
             shape = RoundedCornerShape(16.dp)
         ) {
             GroupCardContent()
+        }
+    }
+    
+    // App Rule Quick Menu
+    DropdownMenu(
+        expanded = showAppRuleMenu,
+        onDismissRequest = { showAppRuleMenu = false }
+    ) {
+        DropdownMenuItem(
+            text = { Text("Set app rule...") },
+            onClick = {
+                showAppRuleMenu = false
+                onSetAppRule?.invoke(group.packageName, group.appName)
+            },
+            leadingIcon = {
+                Icon(Icons.Default.Settings, contentDescription = null)
+            }
+        )
+    }
+    
+    // Tag Edit Dialog - apply to all notifications in group
+    if (showTagEditDialog && onTagsChange != null) {
+        // Use the first notification's tags as the starting point
+        val firstNotification = group.notifications.firstOrNull()
+        if (firstNotification != null) {
+            val historyViewModel: HistoryViewModel = hiltViewModel()
+            TagEditDialog(
+                notification = firstNotification,
+                customTagRepository = historyViewModel.customTagRepository,
+                onDismiss = { showTagEditDialog = false },
+                onSave = { updatedTags ->
+                    // Apply tags to all notifications in the group
+                    group.notifications.forEach { notification ->
+                        onTagsChange(notification, updatedTags)
+                    }
+                    showTagEditDialog = false
+                }
+            )
         }
     }
 }
