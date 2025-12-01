@@ -3,6 +3,7 @@ package com.javohirmx.notifyr.domain.rules
 import com.javohirmx.notifyr.data.repository.AppRulesRepository
 import com.javohirmx.notifyr.data.repository.KeywordRulesRepository
 import com.javohirmx.notifyr.domain.model.*
+import com.javohirmx.notifyr.domain.util.EmailAppDetector
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -51,14 +52,8 @@ class EnhancedNotificationRulesEngine @Inject constructor(
         "org.signalapp.signal"
     )
     
-    private val emailApps = setOf(
-        "com.google.android.apps.gmail",
-        "com.google.android.gm",
-        "com.microsoft.office.outlook",
-        "com.yahoo.mobile.client.android.mail",
-        "com.fsck.k9",
-        "com.oneplus.email"
-    )
+    // Use centralized EmailAppDetector instead of local list
+    // Keeping for backward compatibility in this class, but using EmailAppDetector for checks
     
     private val workApps = setOf(
         "com.slack",
@@ -302,7 +297,7 @@ class EnhancedNotificationRulesEngine @Inject constructor(
         }
         
         // For email apps like Gmail, extract sender from title
-        if (emailApps.contains(notification.packageName)) {
+        if (EmailAppDetector.isEmailApp(notification.packageName)) {
             val title = notification.title.trim()
             // Gmail format: "Sender Name" or "Sender Name - Subject"
             // Try to extract the sender part before any dash or colon
@@ -329,7 +324,7 @@ class EnhancedNotificationRulesEngine @Inject constructor(
         }
         
         // For email apps, group by app + sender (helps with duplicate detection)
-        if (emailApps.contains(notification.packageName) && sender != null) {
+        if (EmailAppDetector.isEmailApp(notification.packageName) && sender != null) {
             return "${notification.packageName}:${sender}"
         }
         

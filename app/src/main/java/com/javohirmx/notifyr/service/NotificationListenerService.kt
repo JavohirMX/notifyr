@@ -12,6 +12,7 @@ import com.javohirmx.notifyr.domain.model.NotificationImportance
 import com.javohirmx.notifyr.domain.model.shouldShowImmediately
 import com.javohirmx.notifyr.domain.rules.EnhancedNotificationRulesEngine
 import com.javohirmx.notifyr.domain.rules.NotificationRulesEngine
+import com.javohirmx.notifyr.domain.util.EmailAppDetector
 import com.javohirmx.notifyr.widget.WidgetUpdateHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -142,23 +143,24 @@ class NotificationListenerService : NotificationListenerService() {
             val title = notification.extras.getCharSequence("android.title")?.toString() ?: ""
             val text = notification.extras.getCharSequence("android.text")?.toString() ?: ""
             val category = notification.category
-            val notificationData = NotificationData(
+            val baseNotificationData = NotificationData(
                 packageName = packageName,
                 appName = appName,
                 title = title,
                 text = text,
                 category = category,
-                importance = NotificationImportance.NORMAL, // Don't classify
+                importance = NotificationImportance.NORMAL, // Don't classify importance
                 timestamp = sbn.postTime
             )
+            
+            // Extract conversationId and sender even in DONT_INTERCEPT mode for proper deduplication
+            // Use enhancedRulesEngine to extract these fields without full classification
+            val enhancedData = enhancedRulesEngine.classifyNotificationWithTags(baseNotificationData)
+            
             serviceScope.launch {
-                // Use longer deduplication window for email apps even in DONT_INTERCEPT mode
-                val isEmailApp = packageName == "com.google.android.apps.gmail" || 
-                                packageName == "com.google.android.gm" ||
-                                packageName == "com.microsoft.office.outlook" ||
-                                packageName == "com.yahoo.mobile.client.android.mail"
-                val dedupWindow = if (isEmailApp) 120_000L else 30_000L
-                notificationRepository.upsertWithDedup(notificationData, dedupWindow)
+                // Use centralized EmailAppDetector for deduplication window
+                val dedupWindow = EmailAppDetector.getDedupWindow(packageName)
+                notificationRepository.upsertWithDedup(enhancedData, dedupWindow)
             }
             return // Don't process further - let original notification through
         }
@@ -203,16 +205,11 @@ class NotificationListenerService : NotificationListenerService() {
         val allowedByFocusMode = focusModeManager.shouldShowNotification(enhancedNotification, currentFocusMode)
         
         // Deduplication window - increased for normal notifications to catch more duplicates
-        // Email apps like Gmail get a longer window as they often send multiple notifications for the same email
-        val isEmailApp = packageName == "com.google.android.apps.gmail" || 
-                        packageName == "com.google.android.gm" ||
-                        packageName == "com.microsoft.office.outlook" ||
-                        packageName == "com.yahoo.mobile.client.android.mail"
-        
+        // Use centralized EmailAppDetector for consistency
         val dedupWindowMs = when {
             isCall -> 15_000L
             isOngoing || isMedia -> 60_000L
-            isEmailApp -> 120_000L  // 2 minutes for email apps to catch Gmail duplicates
+            EmailAppDetector.isEmailApp(packageName) -> EmailAppDetector.getDedupWindow(packageName)
             else -> 30_000L  // 30 seconds for other apps
         }
         

@@ -57,16 +57,16 @@ interface NotificationDao {
     @Query("SELECT COUNT(*) FROM notifications WHERE isRead = 0")
     suspend fun getUnreadNotificationCount(): Int
 
-    @Query("SELECT * FROM notifications WHERE packageName = :packageName AND title = :title AND text = :text AND timestamp > :since ORDER BY timestamp DESC LIMIT 1")
+    @Query("SELECT * FROM notifications WHERE packageName = :packageName AND title = :title AND text = :text AND timestamp >= :since ORDER BY timestamp DESC LIMIT 1")
     suspend fun findRecentDuplicate(packageName: String, title: String, text: String, since: Long): NotificationEntity?
 
-    @Query("SELECT * FROM notifications WHERE packageName = :packageName AND timestamp > :since ORDER BY timestamp DESC")
+    @Query("SELECT * FROM notifications WHERE packageName = :packageName AND timestamp >= :since ORDER BY timestamp DESC LIMIT 100")
     suspend fun findRecentNotificationsByPackage(packageName: String, since: Long): List<NotificationEntity>
 
-    @Query("SELECT * FROM notifications WHERE packageName = :packageName AND conversationId = :conversationId AND timestamp > :since ORDER BY timestamp DESC LIMIT 1")
+    @Query("SELECT * FROM notifications WHERE packageName = :packageName AND conversationId = :conversationId AND timestamp >= :since ORDER BY timestamp DESC LIMIT 1")
     suspend fun findRecentDuplicateByConversationId(packageName: String, conversationId: String, since: Long): NotificationEntity?
 
-    @Query("SELECT * FROM notifications WHERE packageName = :packageName AND sender = :sender AND timestamp > :since ORDER BY timestamp DESC LIMIT 1")
+    @Query("SELECT * FROM notifications WHERE packageName = :packageName AND sender = :sender AND timestamp >= :since ORDER BY timestamp DESC LIMIT 1")
     suspend fun findRecentDuplicateBySender(packageName: String, sender: String, since: Long): NotificationEntity?
 
     @Query("UPDATE notifications SET timestamp = :timestamp WHERE id = :id")
