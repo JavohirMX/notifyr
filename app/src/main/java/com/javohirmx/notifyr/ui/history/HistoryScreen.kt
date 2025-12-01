@@ -446,19 +446,16 @@ fun NotificationList(
                                 is NotificationItem.Group -> item.group.unreadCount
                             }
                         }
-                        if (unreadCount > 0) {
-                            FilledTonalButton(
-                                onClick = onMarkAllAsRead,
-                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Done,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Mark all read")
-                            }
+                        // Always show button to prevent layout shift, but disable when no unread
+                        IconButton(
+                            onClick = onMarkAllAsRead,
+                            enabled = unreadCount > 0
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Done,
+                                contentDescription = "Mark all read",
+                                modifier = Modifier.size(24.dp)
+                            )
                         }
                     }
                 }
@@ -535,7 +532,10 @@ fun NotificationGroupCard(
 ) {
     val context = LocalContext.current
     val packageManager = context.packageManager
-    var isExpanded by remember { mutableStateOf(false) }
+    // Unread groups start expanded, read groups start collapsed
+    var isExpanded by remember(group.isAllRead) { 
+        mutableStateOf(!group.isAllRead) 
+    }
     var showAppRuleMenu by remember { mutableStateOf(false) }
     var showImportanceMenu by remember { mutableStateOf(false) }
     var showTagEditDialog by remember { mutableStateOf(false) }
@@ -563,17 +563,11 @@ fun NotificationGroupCard(
                 .fillMaxWidth()
                 .padding(16.dp)
         ) {
-            // Group Header - Clickable to expand/collapse or open app
+            // Group Header - Clickable to expand/collapse
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { 
-                        if (group.isAllRead) {
-                            onOpenApp()
-                        } else {
-                            isExpanded = !isExpanded
-                        }
-                    },
+                    .clickable { isExpanded = !isExpanded },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -764,6 +758,17 @@ fun NotificationGroupCard(
                             )
                         }
                     }
+                    
+                    // Open App button
+                    IconButton(
+                        onClick = onOpenApp
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowForward,
+                            contentDescription = "Open App",
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
                 
                 Spacer(modifier = Modifier.weight(1f))
@@ -831,7 +836,6 @@ fun NotificationGroupCard(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onOpenApp)
                 .animateContentSize(),
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
@@ -844,7 +848,6 @@ fun NotificationGroupCard(
         ElevatedCard(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = onOpenApp)
                 .animateContentSize(),
             elevation = CardDefaults.elevatedCardElevation(
                 defaultElevation = 3.dp
