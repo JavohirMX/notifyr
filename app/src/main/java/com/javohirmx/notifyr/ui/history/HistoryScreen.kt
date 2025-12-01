@@ -887,45 +887,17 @@ fun NotificationHistoryCard(
     var showImportanceMenu by remember { mutableStateOf(false) }
     var showTagEditDialog by remember { mutableStateOf(false) }
     
-    // For read notifications, start collapsed; for unread, always expanded
-    var isExpanded by remember(notification.isRead) { 
-        mutableStateOf(!notification.isRead) 
-    }
-    
-    ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .animateContentSize(),
-        elevation = CardDefaults.elevatedCardElevation(
-            defaultElevation = if (notification.isRead) 1.dp else 3.dp
-        ),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = if (notification.isRead) {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-            } else {
-                MaterialTheme.colorScheme.surface
-            }
-        ),
-        shape = RoundedCornerShape(16.dp)
-    ) {
+    // Helper composable for card content
+    @Composable
+    fun CardContent() {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(if (notification.isRead && !isExpanded) 12.dp else 16.dp)
+                .padding(16.dp)
         ) {
-            // Header with app icon, name and timestamp - clickable to expand/collapse for read notifications
+            // Header with app icon, name and timestamp
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(
-                        onClick = {
-                            if (notification.isRead) {
-                                isExpanded = !isExpanded
-                            } else {
-                                onOpenApp()
-                            }
-                        }
-                    ),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -939,9 +911,9 @@ fun NotificationHistoryCard(
                             context = context,
                             packageName = notification.packageName,
                             appName = notification.appName,
-                            size = if (notification.isRead && !isExpanded) 32.dp else 40.dp,
+                            size = 40.dp,
                             modifier = Modifier
-                                .size(if (notification.isRead && !isExpanded) 32.dp else 40.dp)
+                                .size(40.dp)
                                 .clip(RoundedCornerShape(8.dp))
                         )
                         // Unread indicator dot
@@ -964,13 +936,9 @@ fun NotificationHistoryCard(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = notification.appName,
-                            style = if (notification.isRead && !isExpanded) {
-                                MaterialTheme.typography.bodyMedium
-                            } else {
-                                MaterialTheme.typography.labelLarge
-                            },
+                            style = MaterialTheme.typography.labelLarge,
                             color = if (notification.isRead) {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                             } else {
                                 MaterialTheme.colorScheme.onSurface
                             },
@@ -983,33 +951,18 @@ fun NotificationHistoryCard(
                             text = formatTimestamp(notification.timestamp),
                             style = MaterialTheme.typography.labelSmall,
                             color = if (notification.isRead) {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             }
                         )
                     }
                 }
-                
-                // Expand/collapse indicator for read notifications
-                if (notification.isRead) {
-                    Icon(
-                        imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                        contentDescription = if (isExpanded) "Collapse" else "Expand",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
             }
             
-            // Expandable content section (only show when expanded for read notifications, always show for unread)
-            AnimatedVisibility(
-                visible = !notification.isRead || isExpanded,
-                enter = expandVertically(animationSpec = tween(300)) + fadeIn(animationSpec = tween(300)),
-                exit = shrinkVertically(animationSpec = tween(300)) + fadeOut(animationSpec = tween(300))
-            ) {
-                Column {
-                    // Content section
+            // Content section - always visible for both read and unread
+            Column {
+                // Content section
                     if (notification.title.isNotBlank() || notification.text.isNotBlank()) {
                         Spacer(modifier = Modifier.height(12.dp))
                         
@@ -1023,7 +976,7 @@ fun NotificationHistoryCard(
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold,
                                     color = if (notification.isRead) {
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
                                     } else {
                                         MaterialTheme.colorScheme.onSurface
                                     },
@@ -1038,7 +991,7 @@ fun NotificationHistoryCard(
                                     text = notification.text,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = if (notification.isRead) {
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
                                     } else {
                                         MaterialTheme.colorScheme.onSurfaceVariant
                                     },
@@ -1224,24 +1177,54 @@ fun NotificationHistoryCard(
                     }
                 }
             }
-        }
-        
-        // App Rule Quick Menu
-        DropdownMenu(
-            expanded = showAppRuleMenu,
-            onDismissRequest = { showAppRuleMenu = false }
+    }
+    
+    // Use Card for read notifications (no elevation), ElevatedCard for unread
+    if (notification.isRead) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenApp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            ),
+            shape = RoundedCornerShape(16.dp)
         ) {
-            DropdownMenuItem(
-                text = { Text("Set app rule...") },
-                onClick = {
-                    showAppRuleMenu = false
-                    onSetAppRule?.invoke(notification.packageName, notification.appName)
-                },
-                leadingIcon = {
-                    Icon(Icons.Default.Settings, contentDescription = null)
-                }
-            )
+            CardContent()
         }
+    } else {
+        ElevatedCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenApp)
+                .animateContentSize(),
+            elevation = CardDefaults.elevatedCardElevation(
+                defaultElevation = 3.dp
+            ),
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surface
+            ),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            CardContent()
+        }
+    }
+    
+    // App Rule Quick Menu
+    DropdownMenu(
+        expanded = showAppRuleMenu,
+        onDismissRequest = { showAppRuleMenu = false }
+    ) {
+        DropdownMenuItem(
+            text = { Text("Set app rule...") },
+            onClick = {
+                showAppRuleMenu = false
+                onSetAppRule?.invoke(notification.packageName, notification.appName)
+            },
+            leadingIcon = {
+                Icon(Icons.Default.Settings, contentDescription = null)
+            }
+        )
     }
     
     // Tag Edit Dialog
