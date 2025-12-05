@@ -93,11 +93,10 @@ class NotificationRepository(
     /**
      * Unified deduplication that works for all apps.
      * Priority order:
-     * 1. conversationId match (if available) - works for messaging/email apps
-     * 2. sender + title/text match (if available) - works for messaging/email apps
-     * 3. Exact packageName + title + text match (fast path)
-     * 4. Normalized packageName + title + text match (handles whitespace differences)
-     * 5. Empty notification matching (packageName + category + timestamp proximity)
+     * 1. sender + title/text match (if available) - works for messaging/email apps
+     * 2. Exact packageName + title + text match (fast path)
+     * 3. Normalized packageName + title + text match (handles whitespace differences)
+     * 4. Empty notification matching (packageName + timestamp proximity)
      */
     suspend fun findRecentDuplicate(
         packageName: String,
@@ -107,15 +106,7 @@ class NotificationRepository(
         conversationId: String? = null,
         sender: String? = null
     ): NotificationData? {
-        // Priority 1: Try conversationId match (works for messaging/email apps)
-        if (conversationId != null && conversationId.isNotEmpty()) {
-            val convMatch = notificationDao.findRecentDuplicateByConversationId(packageName, conversationId, since)
-            if (convMatch != null) {
-                return convMatch.toDomain()
-            }
-        }
-        
-        // Priority 2: Try sender-based matching (works for messaging/email apps)
+        // Priority 1: Try sender-based matching (works for messaging/email apps)
         // Only if sender is available and we also check title/text similarity
         if (sender != null && sender.isNotEmpty()) {
             val senderMatch = notificationDao.findRecentDuplicateBySender(packageName, sender, since)
@@ -137,13 +128,13 @@ class NotificationRepository(
             }
         }
         
-        // Priority 3: Try exact match (fast path)
+        // Priority 2: Try exact match (fast path)
         val exactMatch = notificationDao.findRecentDuplicate(packageName, title, text, since)
         if (exactMatch != null) {
             return exactMatch.toDomain()
         }
         
-        // Priority 4: Check for normalized matches within the same package
+        // Priority 3: Check for normalized matches within the same package
         // This handles cases where there might be whitespace differences
         val normalizedTitle = normalizeText(title)
         val normalizedText = normalizeText(text)
