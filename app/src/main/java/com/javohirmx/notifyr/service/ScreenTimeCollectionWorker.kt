@@ -18,6 +18,13 @@ class ScreenTimeCollectionWorker @AssistedInject constructor(
     
     override suspend fun doWork(): Result {
         return try {
+            // Check permission first - if revoked, stop periodic work
+            val hasPermission = com.javohirmx.notifyr.utils.PermissionUtils.isUsageStatsPermissionGranted(applicationContext)
+            if (!hasPermission) {
+                // Permission revoked - return success to stop retrying
+                return Result.success()
+            }
+            
             // Collect both hourly aggregates and minute-level sessions
             val hourlySuccess = collectScreenTimeUseCase()
             val sessionSuccess = collectScreenTimeUseCase.collectSessions()
@@ -25,13 +32,20 @@ class ScreenTimeCollectionWorker @AssistedInject constructor(
             // Update screen time widgets
             WidgetUpdateHelper.updateScreenTimeWidgets(applicationContext)
             
-            if (hourlySuccess || sessionSuccess) {
+            // Both should succeed for complete data, but partial success is acceptable
+            // Log warning if only one succeeds
+            if (hourlySuccess && sessionSuccess) {
+                Result.success()
+            } else if (hourlySuccess || sessionSuccess) {
+                // Partial success - log but don't retry immediately
+                // The next periodic run will try again
                 Result.success()
             } else {
-                // Permission not granted, but don't fail - just retry later
+                // Both failed - likely permission issue, retry later
                 Result.retry()
             }
         } catch (e: Exception) {
+            // Retry with exponential backoff on exceptions
             Result.retry()
         }
     }

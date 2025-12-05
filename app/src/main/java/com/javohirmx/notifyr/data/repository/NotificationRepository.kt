@@ -168,8 +168,32 @@ class NotificationRepository(
     suspend fun updateTimestamp(id: Long, timestamp: Long) {
         notificationDao.updateTimestamp(id, timestamp)
     }
+    
+    /**
+     * Finds a recent continuous notification duplicate based on packageName + category.
+     * This is used for continuous notifications (music, calls, etc.) where title/text changes frequently.
+     * Falls back to packageName-only matching if category is null.
+     */
+    suspend fun findRecentContinuousDuplicate(
+        packageName: String,
+        category: String?,
+        since: Long
+    ): NotificationData? {
+        if (category != null) {
+            // Try category-based matching first
+            val entity = notificationDao.findRecentContinuousNotification(packageName, category, since)
+            if (entity != null) {
+                return entity.toDomain()
+            }
+        }
+        
+        // Fallback: for continuous notifications without category, match on packageName only
+        // This handles edge cases where FLAG_ONGOING_EVENT is set but no category is provided
+        val entity = notificationDao.findRecentContinuousNotificationByPackageOnly(packageName, since)
+        return entity?.toDomain()
+    }
 
-    suspend fun upsertWithDedup(notification: NotificationData, windowMs: Long): Long {
+    suspend fun upsertWithDedup(notification: NotificationData, windowMs: Long, isContinuous: Boolean = false): Long {
         // Fix recursive call risk: ensure we always use a positive window
         val safeWindowMs = if (windowMs <= 0L) {
             30_000L // Default 30 seconds
@@ -190,24 +214,64 @@ class NotificationRepository(
         
         // Use mutex to prevent race conditions in duplicate detection and timestamp updates
         return dedupMutex.withLock {
-            val dup = findRecentDuplicate(
-                packageName = notification.packageName,
-                title = notification.title,
-                text = notification.text,
-                since = safeCutoff,
-                conversationId = notification.conversationId,
-                sender = notification.sender
-            )
-            
-            if (dup != null) {
-                // Refresh timestamp to keep it recent (atomic update)
-                // Use max of existing and new timestamp to handle concurrent updates
-                val existingTimestamp = dup.timestamp
-                val newTimestamp = max(existingTimestamp, notification.timestamp)
-                updateTimestamp(dup.id, newTimestamp)
-                dup.id
+            if (isContinuous) {
+                // For continuous notifications, use category-based deduplication
+                // (works even if category is null - will fall back to packageName-only matching)
+                val dup = findRecentContinuousDuplicate(
+                    packageName = notification.packageName,
+                    category = notification.category,
+                    since = safeCutoff
+                )
+                
+                if (dup != null) {
+                    // Update existing continuous notification entry
+                    // Use max of existing and new timestamp to handle concurrent updates
+                    val existingTimestamp = dup.timestamp
+                    val newTimestamp = max(existingTimestamp, notification.timestamp)
+                    
+                    // Update timestamp and optionally title/text if they changed significantly
+                    // Only update title/text if they're different (to track track changes in music players, etc.)
+                    val titleChanged = normalizeText(dup.title) != normalizeText(notification.title)
+                    val textChanged = normalizeText(dup.text) != normalizeText(notification.text)
+                    
+                    if (titleChanged || textChanged) {
+                        // Update content as well to reflect current state (e.g., current track)
+                        notificationDao.updateNotificationContent(
+                            dup.id,
+                            newTimestamp,
+                            notification.title,
+                            notification.text
+                        )
+                    } else {
+                        // Just update timestamp
+                        updateTimestamp(dup.id, newTimestamp)
+                    }
+                    return@withLock dup.id
+                } else {
+                    // No existing continuous notification found, insert new one
+                    return@withLock insertNotification(notification)
+                }
             } else {
-                insertNotification(notification)
+                // For non-continuous notifications, use standard title+text deduplication
+                val dup = findRecentDuplicate(
+                    packageName = notification.packageName,
+                    title = notification.title,
+                    text = notification.text,
+                    since = safeCutoff,
+                    conversationId = notification.conversationId,
+                    sender = notification.sender
+                )
+                
+                if (dup != null) {
+                    // Refresh timestamp to keep it recent (atomic update)
+                    // Use max of existing and new timestamp to handle concurrent updates
+                    val existingTimestamp = dup.timestamp
+                    val newTimestamp = max(existingTimestamp, notification.timestamp)
+                    updateTimestamp(dup.id, newTimestamp)
+                    dup.id
+                } else {
+                    insertNotification(notification)
+                }
             }
         }
     }

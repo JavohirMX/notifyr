@@ -108,7 +108,14 @@ class ScreenTimeRepository(
      * Insert multiple screen time entries
      */
     suspend fun insertScreenTimeList(screenTimeList: List<ScreenTimeEntity>) {
-        screenTimeDao.insertScreenTimeList(screenTimeList)
+        try {
+            if (screenTimeList.isNotEmpty()) {
+                screenTimeDao.insertScreenTimeList(screenTimeList)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ScreenTimeRepository", "Failed to insert screen time list", e)
+            throw e
+        }
     }
     
     /**
@@ -137,7 +144,21 @@ class ScreenTimeRepository(
      * Insert sessions
      */
     suspend fun insertSessions(sessions: List<ScreenTimeSessionEntity>) {
-        screenTimeSessionDao.insertSessions(sessions)
+        try {
+            if (sessions.isNotEmpty()) {
+                screenTimeSessionDao.insertSessions(sessions)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ScreenTimeRepository", "Failed to insert sessions", e)
+            throw e
+        }
+    }
+    
+    /**
+     * Delete old sessions before a cutoff date
+     */
+    suspend fun deleteOldSessions(cutoffDate: Long): Int {
+        return screenTimeSessionDao.deleteOldSessions(cutoffDate)
     }
     
     /**

@@ -63,13 +63,16 @@ class CollectScreenTimeUseCase @Inject constructor(
             val aggregated = aggregatedStatsMap.getOrPut(stat.packageName) {
                 AggregatedStats()
             }
-            // Sum totalTimeInForeground (but be careful not to double-count)
-            // For INTERVAL_BEST, entries might overlap, so we take the maximum
-            // to avoid overcounting
-            aggregated.totalTimeInForeground = maxOf(
-                aggregated.totalTimeInForeground,
-                stat.totalTimeInForeground
-            )
+            // For INTERVAL_BEST, Android may return multiple entries for the same app
+            // covering different or overlapping time windows. We need to be careful:
+            // - If timestamps overlap significantly, use max to avoid double-counting
+            // - If timestamps don't overlap, we should sum (but this is complex to detect)
+            // The safest approach is to use the entry with the maximum time, but we also
+            // track the time range to ensure we capture the full usage window.
+            // NOTE: This is a fallback - events-based collection (collectSessions) is more accurate
+            if (stat.totalTimeInForeground > aggregated.totalTimeInForeground) {
+                aggregated.totalTimeInForeground = stat.totalTimeInForeground
+            }
             aggregated.lastTimeUsed = maxOf(aggregated.lastTimeUsed, stat.lastTimeUsed)
             aggregated.firstTimeStamp = minOf(aggregated.firstTimeStamp, stat.firstTimeStamp)
             aggregated.lastTimeStamp = maxOf(aggregated.lastTimeStamp, stat.lastTimeStamp)
@@ -87,7 +90,8 @@ class CollectScreenTimeUseCase @Inject constructor(
                 val appInfo = packageManager.getApplicationInfo(packageName, 0)
                 packageManager.getApplicationLabel(appInfo).toString()
             } catch (e: PackageManager.NameNotFoundException) {
-                packageName
+                // App may have been uninstalled - use package name with indicator
+                "Uninstalled App ($packageName)"
             }
             
             // Calculate time spent in each hour
@@ -292,7 +296,8 @@ class CollectScreenTimeUseCase @Inject constructor(
                     val appInfo = packageManager.getApplicationInfo(packageName, 0)
                     packageManager.getApplicationLabel(appInfo).toString()
                 } catch (e: PackageManager.NameNotFoundException) {
-                    packageName
+                    // App may have been uninstalled - use package name with indicator
+                    "Uninstalled App ($packageName)"
                 }
             }
             val appName = appNames[packageName]!!
@@ -310,7 +315,13 @@ class CollectScreenTimeUseCase @Inject constructor(
                     if (sessionStart != null && sessionStart < eventTime) {
                         val duration = eventTime - sessionStart
                         
-                        // Get day start timestamp (midnight)
+                        // Include sessions that overlap with query window
+                        // Clamp session to query window to avoid counting time outside our range
+                        val clampedStart = maxOf(sessionStart, startTime)
+                        val clampedEnd = minOf(eventTime, now)
+                        val clampedDuration = clampedEnd - clampedStart
+                        
+                        // Get day start timestamp (midnight) for the session start
                         calendar.timeInMillis = sessionStart
                         calendar.set(Calendar.HOUR_OF_DAY, 0)
                         calendar.set(Calendar.MINUTE, 0)
@@ -318,16 +329,16 @@ class CollectScreenTimeUseCase @Inject constructor(
                         calendar.set(Calendar.MILLISECOND, 0)
                         val dayStart = calendar.timeInMillis
                         
-                        // Only include sessions that are within our query window and have valid duration
-                        if (sessionStart >= startTime && duration > 0) {
+                        // Include session if it overlaps with query window and has valid duration
+                        if (clampedDuration > 0 && clampedStart < now && clampedEnd > startTime) {
                             sessions.add(
                                 ScreenTimeSessionEntity(
                                     packageName = packageName,
                                     appName = appName,
                                     date = dayStart,
-                                    startTime = sessionStart,
-                                    endTime = eventTime,
-                                    durationMs = duration
+                                    startTime = clampedStart,
+                                    endTime = clampedEnd,
+                                    durationMs = clampedDuration
                                 )
                             )
                         }

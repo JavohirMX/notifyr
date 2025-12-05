@@ -157,18 +157,23 @@ class NotificationListenerService : NotificationListenerService() {
             val enhancedData = enhancedRulesEngine.classifyNotificationWithTags(baseNotificationData)
             
             serviceScope.launch {
-                // Use standard deduplication window (60 seconds)
-                notificationRepository.upsertWithDedup(enhancedData, 60_000L)
+                // Check if this is a continuous notification even in DONT_INTERCEPT mode
+                val isContinuous = isContinuousNotification(notification, category)
+                val dedupWindow = if (isContinuous) 5 * 60_000L else 60_000L
+                notificationRepository.upsertWithDedup(enhancedData, dedupWindow, isContinuous = isContinuous)
             }
             return // Don't process further - let original notification through
         }
         
-        // Don't suppress ongoing notifications (music players, calls, etc.) - let them through
-        val isOngoing = (notification.flags and android.app.Notification.FLAG_ONGOING_EVENT) != 0
+        // Detect continuous notifications (music players, calls, voice recording, stopwatch, etc.)
         val category = notification.category
+        val isContinuous = isContinuousNotification(notification, category)
+        
+        // Don't suppress ongoing/continuous notifications - let them through
+        val isOngoing = (notification.flags and android.app.Notification.FLAG_ONGOING_EVENT) != 0
         val isCall = category == android.app.Notification.CATEGORY_CALL || category == "call"
         val isMedia = category == android.app.Notification.CATEGORY_TRANSPORT || category == "transport"
-        val shouldPreserveOriginal = isOngoing || isCall || isMedia
+        val shouldPreserveOriginal = isOngoing || isCall || isMedia || isContinuous
         
         // Extract notification data
         val title = notification.extras.getCharSequence("android.title")?.toString() ?: ""
@@ -203,14 +208,17 @@ class NotificationListenerService : NotificationListenerService() {
         val allowedByFocusMode = focusModeManager.shouldShowNotification(enhancedNotification, currentFocusMode)
         
         // Unified deduplication window based on notification type
+        // Use longer windows for continuous notifications to prevent database bloat
         val dedupWindowMs = when {
             isCall -> 15_000L  // 15 seconds for calls (rapid updates)
+            isContinuous -> 5 * 60_000L  // 5 minutes for continuous notifications (music, voice recording, stopwatch, etc.)
             isOngoing || isMedia -> 60_000L  // 1 minute for ongoing/media (status updates)
             else -> 60_000L  // 60 seconds for all other notifications
         }
         
         // Store with deduplication
-        notificationRepository.upsertWithDedup(enhancedNotification, dedupWindowMs)
+        // Pass isContinuous flag to use category-based deduplication for continuous notifications
+        notificationRepository.upsertWithDedup(enhancedNotification, dedupWindowMs, isContinuous = isContinuous)
         
         // Update notification widgets
         WidgetUpdateHelper.updateNotificationWidgets(this)
@@ -270,6 +278,42 @@ class NotificationListenerService : NotificationListenerService() {
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
         Log.w(TAG, "Notification Listener Service disconnected")
+    }
+
+    /**
+     * Determines if a notification is a continuous/ongoing notification.
+     * Continuous notifications include: music players, calls, voice recording, stopwatch, navigation, etc.
+     * These notifications update frequently and should be deduplicated by packageName + category instead of title+text.
+     */
+    private fun isContinuousNotification(notification: android.app.Notification, category: String?): Boolean {
+        // Check for FLAG_ONGOING_EVENT flag
+        val isOngoing = (notification.flags and android.app.Notification.FLAG_ONGOING_EVENT) != 0
+        if (isOngoing) {
+            return true
+        }
+        
+        // Check for continuous notification categories
+        val continuousCategories = setOf(
+            android.app.Notification.CATEGORY_CALL,
+            android.app.Notification.CATEGORY_TRANSPORT,
+            android.app.Notification.CATEGORY_PROGRESS,
+            android.app.Notification.CATEGORY_STATUS,
+            android.app.Notification.CATEGORY_NAVIGATION,
+            android.app.Notification.CATEGORY_ALARM,
+            // Also check string versions (some apps use lowercase strings)
+            "call",
+            "transport",
+            "progress",
+            "status",
+            "navigation",
+            "alarm"
+        )
+        
+        if (category != null && continuousCategories.contains(category)) {
+            return true
+        }
+        
+        return false
     }
 
     private fun isSystemLikePackage(packageName: String): Boolean {

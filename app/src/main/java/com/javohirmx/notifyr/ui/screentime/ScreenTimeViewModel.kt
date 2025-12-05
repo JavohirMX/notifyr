@@ -26,6 +26,9 @@ class ScreenTimeViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ScreenTimeUiState())
     val uiState: StateFlow<ScreenTimeUiState> = _uiState.asStateFlow()
     
+    // Cache sessions by date to avoid reloading
+    private val sessionsCache = mutableMapOf<Long, List<UsageSession>>()
+    
     init {
         checkPermission()
         loadScreenTime(ScreenTimeRange.TODAY)
@@ -72,15 +75,27 @@ class ScreenTimeViewModel @Inject constructor(
     }
     
     fun refresh() {
+        // Clear cache on refresh
+        sessionsCache.clear()
         loadScreenTime(_uiState.value.selectedRange)
     }
     
     suspend fun loadSessionsForDate(date: Long): List<UsageSession> {
+        // Return cached sessions if available
+        sessionsCache[date]?.let { return it }
+        
         return try {
-            screenTimeRepository.getSessionsByDate(date)
+            val sessions = screenTimeRepository.getSessionsByDate(date)
+            // Cache the sessions
+            sessionsCache[date] = sessions
+            sessions
         } catch (e: Exception) {
             emptyList()
         }
+    }
+    
+    fun clearSessionsCache() {
+        sessionsCache.clear()
     }
 }
 

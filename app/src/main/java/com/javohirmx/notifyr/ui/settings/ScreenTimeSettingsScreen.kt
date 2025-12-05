@@ -148,7 +148,9 @@ class ScreenTimeSettingsViewModel @Inject constructor(
             calendar.set(Calendar.MILLISECOND, 0)
             val cutoffDate = calendar.timeInMillis
             
+            // Clean both hourly data and sessions
             screenTimeRepository.deleteOldScreenTime(cutoffDate)
+            screenTimeRepository.deleteOldSessions(cutoffDate)
         }
     }
 }

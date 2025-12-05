@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -302,15 +303,15 @@ fun DailyScreenTimeCard(
                     
                     Spacer(modifier = Modifier.height(24.dp))
                     
-                    // Hourly timeline
+                    // Timeline view
                     Text(
-                        text = "Hourly Breakdown",
+                        text = "Usage Timeline",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
                     
-                    SessionTimelineView(
+                    EnhancedTimelineView(
                         date = dailyScreenTime.date,
                         viewModel = viewModel,
                         context = context
@@ -639,13 +640,15 @@ private fun formatHour(hour: Int): String {
 }
 
 @Composable
-fun SessionTimelineView(
+fun EnhancedTimelineView(
     date: Long,
     viewModel: ScreenTimeViewModel,
     context: android.content.Context
 ) {
     var sessions by remember { mutableStateOf<List<UsageSession>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+    var groupByApp by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     
     LaunchedEffect(date) {
         isLoading = true
@@ -653,59 +656,409 @@ fun SessionTimelineView(
         isLoading = false
     }
     
+    // Get day start and end times
+    val calendar = remember(date) {
+        Calendar.getInstance().apply {
+            timeInMillis = date
+        }
+    }
+    val dayStart = remember(date) {
+        calendar.timeInMillis
+    }
+    val dayEnd = remember(date) {
+        Calendar.getInstance().apply {
+            timeInMillis = date
+            add(Calendar.DAY_OF_YEAR, 1)
+        }.timeInMillis
+    }
+    val dayDuration = dayEnd - dayStart
+    
     if (isLoading) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(24.dp),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(32.dp),
+                    strokeWidth = 3.dp
+                )
+                Text(
+                    text = "Loading timeline...",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     } else if (sessions.isEmpty()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(24.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = "No usage data for this day",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    Icons.Default.Info,
+                    contentDescription = null,
+                    modifier = Modifier.size(48.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                )
+                Text(
+                    text = "No usage data for this day",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Screen time data will appear here once apps are used",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
         }
     } else {
-        // Get day start and end times
-        val calendar = Calendar.getInstance()
-        calendar.timeInMillis = date
-        val dayStart = calendar.timeInMillis
-        calendar.add(Calendar.DAY_OF_YEAR, 1)
-        val dayEnd = calendar.timeInMillis
-        
-        // Create timeline items with gaps
-        val timelineItems = buildTimelineItems(sessions, dayStart, dayEnd)
-        
         Column(
             modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            timelineItems.forEach { item ->
-                when (item) {
-                    is TimelineSessionItem -> {
-                        SessionTimelineRow(
-                            session = item.session,
-                            context = context
+            // Visual timeline bar
+            VisualTimelineBar(
+                sessions = sessions,
+                dayStart = dayStart,
+                dayEnd = dayEnd,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(60.dp)
+                    .padding(vertical = 8.dp)
+            )
+            
+            // Group by app toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (groupByApp) "Grouped by App" else "Chronological",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Group by app",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Switch(
+                        checked = groupByApp,
+                        onCheckedChange = { groupByApp = it }
+                    )
+                }
+            }
+            
+            // Sessions list
+            if (groupByApp) {
+                // Group sessions by app
+                val groupedSessions = sessions.groupBy { it.packageName }
+                groupedSessions.forEach { (packageName, appSessions) ->
+                    val firstSession = appSessions.first()
+                    val totalDuration = appSessions.sumOf { it.durationMs }
+                    
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
                         )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // App header
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    AppIconUtils.AppIconOrPlaceholder(
+                                        context = context,
+                                        packageName = packageName,
+                                        appName = firstSession.appName,
+                                        size = 32.dp
+                                    )
+                                    Column {
+                                        Text(
+                                            text = firstSession.appName,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                        Text(
+                                            text = "${appSessions.size} session${if (appSessions.size > 1) "s" else ""}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = formatDuration(totalDuration),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            
+                            // Sessions for this app
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                appSessions.sortedBy { it.startTime }.forEach { session ->
+                                    EnhancedSessionRow(
+                                        session = session,
+                                        dayStart = dayStart,
+                                        dayDuration = dayDuration,
+                                        context = context,
+                                        showAppName = false
+                                    )
+                                }
+                            }
+                        }
                     }
-                    is TimelineGapItem -> {
-                        GapTimelineRow(
-                            startTime = item.startTime,
-                            endTime = item.endTime
+                }
+            } else {
+                // Chronological view
+                val timelineItems = buildTimelineItems(sessions, dayStart, dayEnd)
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    timelineItems.forEach { item ->
+                        when (item) {
+                            is TimelineSessionItem -> {
+                                EnhancedSessionRow(
+                                    session = item.session,
+                                    dayStart = dayStart,
+                                    dayDuration = dayDuration,
+                                    context = context,
+                                    showAppName = true
+                                )
+                            }
+                            is TimelineGapItem -> {
+                                GapTimelineRow(
+                                    startTime = item.startTime,
+                                    endTime = item.endTime
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun VisualTimelineBar(
+    sessions: List<UsageSession>,
+    dayStart: Long,
+    dayEnd: Long,
+    modifier: Modifier = Modifier
+) {
+    val dayDuration = dayEnd - dayStart
+    
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(8.dp)
+        ) {
+            // Background grid (24 hours)
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.spacedBy(0.dp)
+            ) {
+                repeat(24) { hour ->
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .let {
+                                if (hour % 6 == 0) {
+                                    it.border(
+                                        width = 0.5.dp,
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                    )
+                                } else {
+                                    it
+                                }
+                            }
+                    )
+                }
+            }
+            
+            // Session bars
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                val maxWidth = maxWidth
+                sessions.forEach { session ->
+                    val startOffset = ((session.startTime - dayStart).toFloat() / dayDuration.toFloat())
+                        .coerceIn(0f, 1f)
+                    val endOffset = ((session.endTime - dayStart).toFloat() / dayDuration.toFloat())
+                        .coerceIn(0f, 1f)
+                    val width = (endOffset - startOffset).coerceIn(0.01f, 1f)
+                    val startX = startOffset * maxWidth.value
+                    val barWidth = width * maxWidth.value
+                    
+                    Box(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .width(barWidth.dp)
+                            .offset(x = startX.dp)
+                            .background(
+                                color = getColorForApp(session.packageName).copy(alpha = 0.7f),
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                    )
+                }
+            }
+            
+            // Hour labels at bottom
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                repeat(5) { i ->
+                    val hour = i * 6
+                    Text(
+                        text = String.format("%02d:00", hour),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.alpha(if (i == 0 || i == 4) 1f else 0.5f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EnhancedSessionRow(
+    session: UsageSession,
+    dayStart: Long,
+    dayDuration: Long,
+    context: android.content.Context,
+    showAppName: Boolean
+) {
+    // Calculate position in day (0.0 to 1.0)
+    val startPosition = ((session.startTime - dayStart).toFloat() / dayDuration.toFloat())
+        .coerceIn(0f, 1f)
+    val endPosition = ((session.endTime - dayStart).toFloat() / dayDuration.toFloat())
+        .coerceIn(0f, 1f)
+    val durationRatio = (endPosition - startPosition).coerceIn(0f, 1f)
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            if (showAppName) {
+                AppIconUtils.AppIconOrPlaceholder(
+                    context = context,
+                    packageName = session.packageName,
+                    appName = session.appName,
+                    size = 40.dp
+                )
+            } else {
+                // Small indicator dot
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(
+                            color = getColorForApp(session.packageName),
+                            shape = androidx.compose.foundation.shape.CircleShape
+                        )
+                )
+            }
+            
+            Column(modifier = Modifier.weight(1f)) {
+                if (showAppName) {
+                    Text(
+                        text = session.appName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = session.getFormattedTimeRange(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Medium
+                    )
+                    // Visual indicator of position in day
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .width(60.dp)
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        val barWidth = maxWidth.value * durationRatio
+                        val startX = maxWidth.value * startPosition
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .width(barWidth.dp)
+                                .offset(x = startX.dp)
+                                .background(
+                                    color = getColorForApp(session.packageName),
+                                    shape = RoundedCornerShape(2.dp)
+                                )
                         )
                     }
                 }
             }
+            
+            Text(
+                text = session.getFormattedDuration(),
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }
