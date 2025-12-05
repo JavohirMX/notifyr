@@ -24,16 +24,13 @@ fun BottomNavigationBar(navController: NavController) {
     // Track the last bottom nav route we directly navigated to
     // This helps us highlight the correct tab when on nested routes
     var lastBottomNavRoute by remember { mutableStateOf<String?>(null) }
-    var previousBottomNavRoute by remember { mutableStateOf<String?>(null) }
     
     // Update bottom nav routes when we navigate
     LaunchedEffect(currentRoute) {
         when (currentRoute) {
             Screen.Settings.route, Screen.History.route, Screen.Dashboard.route -> {
                 // Direct navigation to a bottom nav route
-                // Save previous before updating
                 if (lastBottomNavRoute != currentRoute) {
-                    previousBottomNavRoute = lastBottomNavRoute
                     lastBottomNavRoute = currentRoute
                 }
             }
@@ -43,15 +40,7 @@ fun BottomNavigationBar(navController: NavController) {
     // Determine which bottom nav item should be highlighted
     val selectedRoute = when (currentRoute) {
         Screen.Settings.route -> Screen.Settings.route
-        Screen.History.route -> {
-            // If we're on History, check if we came from Settings
-            // If the previous bottom nav route was Settings, highlight Settings
-            if (previousBottomNavRoute == Screen.Settings.route) {
-                Screen.Settings.route
-            } else {
-                Screen.History.route
-            }
-        }
+        Screen.History.route -> Screen.History.route
         Screen.Dashboard.route -> Screen.Dashboard.route
         else -> {
             // For nested routes, use the last bottom nav route we tracked

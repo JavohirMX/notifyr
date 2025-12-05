@@ -39,13 +39,21 @@ class MainActivity : ComponentActivity() {
 fun NotifyrApp() {
     val navController = rememberNavController()
     var startDestination by remember { mutableStateOf<String?>(null) }
+    var isOnboardingCompleted by remember { mutableStateOf(false) }
     
-    // Check onboarding status and restore last route
+    // Get current route - needs to be defined early for use in LaunchedEffect
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    
+    // Reactively monitor onboarding status and restore last route
     LaunchedEffect(Unit) {
         val sharedPreferences = navController.context.getSharedPreferences("notifyr_prefs", android.content.Context.MODE_PRIVATE)
-        val isOnboardingCompleted = sharedPreferences.getBoolean("onboarding_completed", false)
         
-        startDestination = if (isOnboardingCompleted) {
+        // Initial check
+        val initialOnboardingStatus = sharedPreferences.getBoolean("onboarding_completed", false)
+        isOnboardingCompleted = initialOnboardingStatus
+        
+        startDestination = if (initialOnboardingStatus) {
             // Restore last opened route, or default to Dashboard
             sharedPreferences.getString("last_route", Screen.Dashboard.route) ?: Screen.Dashboard.route
         } else {
@@ -53,9 +61,18 @@ fun NotifyrApp() {
         }
     }
     
+    // Monitor onboarding completion when route changes (especially when leaving onboarding)
+    LaunchedEffect(currentRoute) {
+        if (currentRoute != null) {
+            val sharedPreferences = navController.context.getSharedPreferences("notifyr_prefs", android.content.Context.MODE_PRIVATE)
+            val currentStatus = sharedPreferences.getBoolean("onboarding_completed", false)
+            if (currentStatus != isOnboardingCompleted) {
+                isOnboardingCompleted = currentStatus
+            }
+        }
+    }
+    
     // Save current route whenever navigation changes
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
     
     LaunchedEffect(currentRoute) {
         currentRoute?.let { route ->
@@ -75,7 +92,9 @@ fun NotifyrApp() {
     }
     
     startDestination?.let { destination ->
-        val isOnboarding = currentRoute == Screen.Onboarding.route || destination == Screen.Onboarding.route
+        // Use currentRoute as primary source of truth for isOnboarding
+        // Only check currentRoute, not destination (which can be stale)
+        val isOnboarding = currentRoute == Screen.Onboarding.route
         
         if (isOnboarding) {
             // Show onboarding without bottom navigation
@@ -89,10 +108,7 @@ fun NotifyrApp() {
             Scaffold(
                 modifier = Modifier.fillMaxSize(),
                 bottomBar = {
-                    // Hide bottom bar if navigating to onboarding again for any reason
-                    if (!isOnboarding) {
-                        BottomNavigationBar(navController = navController)
-                    }
+                    BottomNavigationBar(navController = navController)
                 }
             ) { innerPadding ->
                 NotifyrNavigation(

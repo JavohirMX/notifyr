@@ -55,9 +55,11 @@ class OnboardingViewModel @Inject constructor(
     }
     
     fun completeOnboarding() {
+        // Use commit() instead of apply() to ensure synchronous write
+        // This ensures the onboarding status is saved before navigation happens
         sharedPreferences.edit()
             .putBoolean("onboarding_completed", true)
-            .apply()
+            .commit()
         
         _uiState.value = _uiState.value.copy(
             isOnboardingCompleted = true
