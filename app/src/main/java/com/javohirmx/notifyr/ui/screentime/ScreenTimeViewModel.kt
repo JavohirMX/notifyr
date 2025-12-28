@@ -8,6 +8,7 @@ import com.javohirmx.notifyr.domain.model.DailyScreenTime
 import com.javohirmx.notifyr.domain.model.ScreenTimeRange
 import com.javohirmx.notifyr.domain.model.UsageSession
 import com.javohirmx.notifyr.domain.usecase.GetScreenTimeUseCase
+import com.javohirmx.notifyr.service.ScreenTimeCollectorService
 import com.javohirmx.notifyr.utils.PermissionUtils
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,7 +21,8 @@ import javax.inject.Inject
 class ScreenTimeViewModel @Inject constructor(
     application: Application,
     private val getScreenTimeUseCase: GetScreenTimeUseCase,
-    private val screenTimeRepository: ScreenTimeRepository
+    private val screenTimeRepository: ScreenTimeRepository,
+    private val screenTimeCollectorService: ScreenTimeCollectorService
 ) : AndroidViewModel(application) {
     
     private val _uiState = MutableStateFlow(ScreenTimeUiState())
@@ -50,6 +52,14 @@ class ScreenTimeViewModel @Inject constructor(
             )
             
             try {
+                // Trigger immediate collection if permission is granted and it's TODAY range
+                // This ensures we have the latest data
+                if (PermissionUtils.isUsageStatsPermissionGranted(getApplication()) && range == ScreenTimeRange.TODAY) {
+                    screenTimeCollectorService.triggerImmediateCollection()
+                    // Wait a bit for collection to complete
+                    kotlinx.coroutines.delay(500)
+                }
+                
                 val dailyScreenTime = getScreenTimeUseCase(range)
                 _uiState.value = _uiState.value.copy(
                     dailyScreenTime = dailyScreenTime,
@@ -77,6 +87,12 @@ class ScreenTimeViewModel @Inject constructor(
     fun refresh() {
         // Clear cache on refresh
         sessionsCache.clear()
+        
+        // Trigger immediate collection on refresh
+        if (PermissionUtils.isUsageStatsPermissionGranted(getApplication())) {
+            screenTimeCollectorService.triggerImmediateCollection()
+        }
+        
         loadScreenTime(_uiState.value.selectedRange)
     }
     

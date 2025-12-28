@@ -405,7 +405,7 @@ fun AppTimeRow(
             context = context,
             packageName = appScreenTime.packageName,
             appName = appScreenTime.appName,
-            size = 40.dp
+            size = 32.dp
         )
         
         Column(modifier = Modifier.weight(1f)) {
@@ -648,7 +648,6 @@ fun EnhancedTimelineView(
     var sessions by remember { mutableStateOf<List<UsageSession>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var groupByApp by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
     
     LaunchedEffect(date) {
         isLoading = true
@@ -729,16 +728,34 @@ fun EnhancedTimelineView(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Visual timeline bar
-            VisualTimelineBar(
-                sessions = sessions,
-                dayStart = dayStart,
-                dayEnd = dayEnd,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(60.dp)
-                    .padding(vertical = 8.dp)
-            )
+            // Enhanced visual timeline bar
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)
+                ),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "24-Hour Timeline",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    VisualTimelineBar(
+                        sessions = sessions,
+                        dayStart = dayStart,
+                        dayEnd = dayEnd,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(80.dp)
+                    )
+                }
+            }
             
             // Group by app toggle
             Row(
@@ -879,18 +896,21 @@ fun VisualTimelineBar(
 ) {
     val dayDuration = dayEnd - dayStart
     
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-        )
+    // Group sessions by app for better visualization
+    val sessionsByApp = sessions.groupBy { it.packageName }
+    val totalDuration = sessions.sumOf { it.durationMs }
+    
+    Box(
+        modifier = modifier
     ) {
+        // Background with hour markers
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(8.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
         ) {
-            // Background grid (24 hours)
+            // Hour grid lines
             Row(
                 modifier = Modifier.fillMaxSize(),
                 horizontalArrangement = Arrangement.spacedBy(0.dp)
@@ -901,10 +921,10 @@ fun VisualTimelineBar(
                             .weight(1f)
                             .fillMaxHeight()
                             .let {
-                                if (hour % 6 == 0) {
+                                if (hour % 3 == 0) {
                                     it.border(
                                         width = 0.5.dp,
-                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                                     )
                                 } else {
                                     it
@@ -913,49 +933,90 @@ fun VisualTimelineBar(
                     )
                 }
             }
+        }
+        
+        // Session bars - draw all sessions on timeline
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(4.dp)
+        ) {
+            val maxWidth = maxWidth
+            val maxHeight = maxHeight
             
-            // Session bars
-            BoxWithConstraints(
-                modifier = Modifier.fillMaxSize()
-            ) {
-                val maxWidth = maxWidth
-                sessions.forEach { session ->
-                    val startOffset = ((session.startTime - dayStart).toFloat() / dayDuration.toFloat())
-                        .coerceIn(0f, 1f)
-                    val endOffset = ((session.endTime - dayStart).toFloat() / dayDuration.toFloat())
-                        .coerceIn(0f, 1f)
-                    val width = (endOffset - startOffset).coerceIn(0.01f, 1f)
-                    val startX = startOffset * maxWidth.value
-                    val barWidth = width * maxWidth.value
-                    
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .width(barWidth.dp)
-                            .offset(x = startX.dp)
-                            .background(
-                                color = getColorForApp(session.packageName).copy(alpha = 0.7f),
-                                shape = RoundedCornerShape(4.dp)
-                            )
-                    )
-                }
+            // Draw all sessions, overlapping if needed
+            sessions.forEach { session ->
+                val startOffset = ((session.startTime - dayStart).toFloat() / dayDuration.toFloat())
+                    .coerceIn(0f, 1f)
+                val endOffset = ((session.endTime - dayStart).toFloat() / dayDuration.toFloat())
+                    .coerceIn(0f, 1f)
+                val width = (endOffset - startOffset).coerceIn(0.01f, 1f)
+                val startX = startOffset * maxWidth.value
+                val barWidth = width * maxWidth.value
+                
+                Box(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .width(barWidth.dp)
+                        .offset(x = startX.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            color = getColorForApp(session.packageName).copy(alpha = 0.75f),
+                            shape = RoundedCornerShape(4.dp)
+                        )
+                )
             }
-            
-            // Hour labels at bottom
+        }
+        
+        // Hour labels at bottom
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            repeat(5) { i ->
+                val hour = i * 6
+                Text(
+                    text = String.format("%02d:00", hour),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    fontWeight = if (i == 0 || i == 4) FontWeight.Bold else FontWeight.Normal
+                )
+            }
+        }
+        
+        // Summary info at top
+        if (totalDuration > 0) {
             Row(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .align(Alignment.TopStart)
+                    .padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                repeat(5) { i ->
-                    val hour = i * 6
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.9f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
                     Text(
-                        text = String.format("%02d:00", hour),
+                        text = formatDuration(totalDuration),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.9f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = "${sessions.size} session${if (sessions.size != 1) "s" else ""}",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        modifier = Modifier.alpha(if (i == 0 || i == 4) 1f else 0.5f)
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
             }
@@ -1019,37 +1080,26 @@ fun EnhancedSessionRow(
                         fontWeight = FontWeight.Medium
                     )
                 }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // Visual indicator of position in day (mini timeline)
+                BoxWithConstraints(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Text(
-                        text = session.getFormattedTimeRange(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Medium
-                    )
-                    // Visual indicator of position in day
-                    BoxWithConstraints(
+                    val barWidth = maxWidth.value * durationRatio
+                    val startX = maxWidth.value * startPosition
+                    Box(
                         modifier = Modifier
-                            .width(60.dp)
-                            .height(4.dp)
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                    ) {
-                        val barWidth = maxWidth.value * durationRatio
-                        val startX = maxWidth.value * startPosition
-                        Box(
-                            modifier = Modifier
-                                .fillMaxHeight()
-                                .width(barWidth.dp)
-                                .offset(x = startX.dp)
-                                .background(
-                                    color = getColorForApp(session.packageName),
-                                    shape = RoundedCornerShape(2.dp)
-                                )
-                        )
-                    }
+                            .fillMaxHeight()
+                            .width(barWidth.dp)
+                            .offset(x = startX.dp)
+                            .background(
+                                color = getColorForApp(session.packageName),
+                                shape = RoundedCornerShape(3.dp)
+                            )
+                    )
                 }
             }
             
@@ -1132,15 +1182,9 @@ fun SessionTimelineRow(
             
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = session.getFormattedTimeRange(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
                     text = session.appName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium
                 )
             }
             
