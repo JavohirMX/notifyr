@@ -621,25 +621,15 @@ fun NotificationGroupCard(
                                 overflow = TextOverflow.Ellipsis
                             )
                             
-                            // Group count badge
-                            Badge(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer
-                            ) {
-                                Text(
-                                    text = "${group.count}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            
                             // Unread count badge
                             if (group.unreadCount > 0) {
                                 Badge(
                                     containerColor = MaterialTheme.colorScheme.errorContainer
                                 ) {
                                     Text(
-                                        text = "${group.unreadCount} unread",
-                                        style = MaterialTheme.typography.labelSmall
+                                        text = "${group.unreadCount}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold
                                     )
                                 }
                             }
