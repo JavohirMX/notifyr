@@ -125,10 +125,30 @@ fun HistoryScreen(
                 viewModel.saveSelectedTab(pagerState.currentPage)
             }
             
+            // Calculate unread counts for each importance level
+            val urgentUnreadCount = uiState.urgentNotifications.sumOf { item ->
+                when (item) {
+                    is NotificationItem.Single -> if (item.notification.isRead) 0 else 1
+                    is NotificationItem.Group -> item.group.unreadCount
+                }
+            }
+            val normalUnreadCount = uiState.normalNotifications.sumOf { item ->
+                when (item) {
+                    is NotificationItem.Single -> if (item.notification.isRead) 0 else 1
+                    is NotificationItem.Group -> item.group.unreadCount
+                }
+            }
+            val ignoredUnreadCount = uiState.ignoredNotifications.sumOf { item ->
+                when (item) {
+                    is NotificationItem.Single -> if (item.notification.isRead) 0 else 1
+                    is NotificationItem.Group -> item.group.unreadCount
+                }
+            }
+            
             val tabs = listOf(
-                TabData("Urgent", uiState.urgentNotifications.size, Icons.Default.Warning),
-                TabData("Normal", uiState.normalNotifications.size, Icons.Default.Notifications),
-                TabData("Ignored", uiState.ignoredNotifications.size, Icons.Default.Close)
+                TabData("Urgent", urgentUnreadCount, Icons.Default.Warning),
+                TabData("Normal", normalUnreadCount, Icons.Default.Notifications),
+                TabData("Ignored", ignoredUnreadCount, Icons.Default.Close)
             )
             
             ScrollableTabRow(
@@ -429,13 +449,13 @@ fun NotificationList(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                            .padding(horizontal = 16.dp, vertical = 3.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "${notifications.size} notification${if (notifications.size != 1) "s" else ""}",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             fontWeight = FontWeight.Medium
                         )
@@ -449,7 +469,8 @@ fun NotificationList(
                         // Always show button to prevent layout shift, but disable when no unread
                         IconButton(
                             onClick = onMarkAllAsRead,
-                            enabled = unreadCount > 0
+                            enabled = unreadCount > 0,
+                            modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Done,
