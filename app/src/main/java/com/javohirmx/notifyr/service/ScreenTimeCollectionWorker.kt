@@ -18,36 +18,45 @@ class ScreenTimeCollectionWorker @AssistedInject constructor(
     
     override suspend fun doWork(): Result {
         return try {
-            // Check permission first - if revoked, stop periodic work
             val hasPermission = com.javohirmx.notifyr.utils.PermissionUtils.isUsageStatsPermissionGranted(applicationContext)
             if (!hasPermission) {
-                // Permission revoked - return success to stop retrying
+                // P1 FIX: Log permission revocation
+                android.util.Log.w(TAG, "Usage stats permission revoked, stopping collection")
                 return Result.success()
             }
             
-            // Collect both hourly aggregates and minute-level sessions
-            val hourlySuccess = collectScreenTimeUseCase()
-            val sessionSuccess = collectScreenTimeUseCase.collectSessions()
+            android.util.Log.d(TAG, "Starting screen time collection")
+            val startTime = System.currentTimeMillis()
             
-            // Update screen time widgets
-            WidgetUpdateHelper.updateScreenTimeWidgets(applicationContext)
+            // P0 FIX: Use only sessions-based collection (accurate)
+            // Removed redundant hourly stats collection which was using maxOf (data loss)
+            val success = collectScreenTimeUseCase()
             
-            // Both should succeed for complete data, but partial success is acceptable
-            // Log warning if only one succeeds
-            if (hourlySuccess && sessionSuccess) {
-                Result.success()
-            } else if (hourlySuccess || sessionSuccess) {
-                // Partial success - log but don't retry immediately
-                // The next periodic run will try again
+            val duration = System.currentTimeMillis() - startTime
+            if (success) {
+                android.util.Log.d(TAG, "Collection succeeded in ${duration}ms")
+                
+                // Update widgets
+                try {
+                    WidgetUpdateHelper.updateScreenTimeWidgets(applicationContext)
+                } catch (e: Exception) {
+                    android.util.Log.w(TAG, "Failed to update widgets: ${e.message}", e)
+                }
+                
                 Result.success()
             } else {
-                // Both failed - likely permission issue, retry later
+                android.util.Log.w(TAG, "Collection failed after ${duration}ms (likely permission issue)")
                 Result.retry()
             }
         } catch (e: Exception) {
-            // Retry with exponential backoff on exceptions
+            // P1 FIX: Log detailed error context
+            android.util.Log.e(TAG, 
+                "Unexpected error during collection: ${e.javaClass.simpleName} - ${e.message}", e)
             Result.retry()
         }
     }
+    
+    companion object {
+        private const val TAG = "ScreenTimeCollectionWorker"
+    }
 }
-

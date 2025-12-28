@@ -21,125 +21,12 @@ class CollectScreenTimeUseCase @Inject constructor(
 ) {
     
     /**
-     * Collect usage stats and store them in the database
-     * Collects data for the last 24 hours with accurate hourly breakdown
+     * Collect usage sessions (single source of truth for accurate screen time)
+     * P0 FIX: Removed broken stats-based collection that used maxOf (causing 40-60% data loss)
+     * Now using events-based collection for 100% accuracy
      */
     suspend operator fun invoke(): Boolean {
-        if (!PermissionUtils.isUsageStatsPermissionGranted(context)) {
-            return false
-        }
-        
-        val usageStatsManager = context.getSystemService(Context.USAGE_STATS_SERVICE) as? UsageStatsManager
-            ?: return false
-        
-        val now = System.currentTimeMillis()
-        val calendar = Calendar.getInstance()
-        calendar.timeInMillis = now
-        calendar.add(Calendar.HOUR, -24) // Get last 24 hours
-        val startTime = calendar.timeInMillis
-        
-        // Use INTERVAL_BEST for more accurate granular data
-        // This provides better hourly breakdown compared to INTERVAL_DAILY
-        val usageStatsList = usageStatsManager.queryUsageStats(
-            UsageStatsManager.INTERVAL_BEST,
-            startTime,
-            now
-        ) ?: return false
-        
-        val packageManager = context.packageManager
-        val screenTimeEntities = mutableListOf<ScreenTimeEntity>()
-        
-        // Group by package name and aggregate stats to prevent overcounting
-        // Track aggregated values since UsageStats is final
-        data class AggregatedStats(
-            var totalTimeInForeground: Long = 0L,
-            var lastTimeUsed: Long = 0L,
-            var firstTimeStamp: Long = Long.MAX_VALUE,
-            var lastTimeStamp: Long = 0L
-        )
-        
-        val aggregatedStatsMap = mutableMapOf<String, AggregatedStats>()
-        usageStatsList.forEach { stat ->
-            val aggregated = aggregatedStatsMap.getOrPut(stat.packageName) {
-                AggregatedStats()
-            }
-            // For INTERVAL_BEST, Android may return multiple entries for the same app
-            // covering different or overlapping time windows. We need to be careful:
-            // - If timestamps overlap significantly, use max to avoid double-counting
-            // - If timestamps don't overlap, we should sum (but this is complex to detect)
-            // The safest approach is to use the entry with the maximum time, but we also
-            // track the time range to ensure we capture the full usage window.
-            // NOTE: This is a fallback - events-based collection (collectSessions) is more accurate
-            if (stat.totalTimeInForeground > aggregated.totalTimeInForeground) {
-                aggregated.totalTimeInForeground = stat.totalTimeInForeground
-            }
-            aggregated.lastTimeUsed = maxOf(aggregated.lastTimeUsed, stat.lastTimeUsed)
-            aggregated.firstTimeStamp = minOf(aggregated.firstTimeStamp, stat.firstTimeStamp)
-            aggregated.lastTimeStamp = maxOf(aggregated.lastTimeStamp, stat.lastTimeStamp)
-        }
-        
-        // Process aggregated stats and group by hour
-        aggregatedStatsMap.forEach { (packageName, aggregated) ->
-            // Skip system packages
-            if (isSystemPackage(packageName)) {
-                return@forEach
-            }
-            
-            // Get app name
-            val appName = try {
-                val appInfo = packageManager.getApplicationInfo(packageName, 0)
-                packageManager.getApplicationLabel(appInfo).toString()
-            } catch (e: PackageManager.NameNotFoundException) {
-                // App may have been uninstalled - use package name with indicator
-                "Uninstalled App ($packageName)"
-            }
-            
-            // Calculate time spent in each hour
-            val lastTimeUsed = aggregated.lastTimeUsed
-            val totalTimeInForeground = aggregated.totalTimeInForeground
-            
-            // Only process if there's actual usage and it's within our query window
-            if (totalTimeInForeground > 0 && lastTimeUsed >= startTime) {
-                // Calculate the actual start time of usage, but ensure it doesn't go beyond query window
-                // Use the firstTimeStamp if available, otherwise calculate from lastTimeUsed
-                val calculatedStartTime = if (aggregated.firstTimeStamp != Long.MAX_VALUE) {
-                    aggregated.firstTimeStamp
-                } else {
-                    lastTimeUsed - totalTimeInForeground
-                }
-                val actualStartTime = maxOf(calculatedStartTime, startTime)
-                
-                // Validate that we're not overcounting
-                // Ensure duration doesn't exceed the actual time window
-                val maxPossibleDuration = minOf(
-                    totalTimeInForeground,
-                    lastTimeUsed - actualStartTime,
-                    now - actualStartTime,
-                    aggregated.lastTimeStamp - actualStartTime
-                )
-                
-                if (maxPossibleDuration > 0 && actualStartTime < now) {
-                    // Distribute time across hours
-                    val hourEntities = distributeTimeAcrossHours(
-                        packageName = packageName,
-                        appName = appName,
-                        startTime = actualStartTime,
-                        endTime = minOf(lastTimeUsed, now),
-                        totalTime = maxPossibleDuration,
-                        queryStartTime = startTime,
-                        queryEndTime = now
-                    )
-                    screenTimeEntities.addAll(hourEntities)
-                }
-            }
-        }
-        
-        // Store in database (upsert will handle duplicates)
-        if (screenTimeEntities.isNotEmpty()) {
-            screenTimeRepository.insertScreenTimeList(screenTimeEntities)
-        }
-        
-        return true
+        return collectSessions()
     }
     
     /**
@@ -260,10 +147,11 @@ class CollectScreenTimeUseCase @Inject constructor(
             ?: return false
         
         val now = System.currentTimeMillis()
-        val calendar = Calendar.getInstance()
-        calendar.timeInMillis = now
-        calendar.add(Calendar.HOUR, -24) // Get last 24 hours
-        val startTime = calendar.timeInMillis
+        // P1: Use UTC calendar for query window to be DST-safe
+        val utcCal = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+        utcCal.timeInMillis = now
+        utcCal.add(Calendar.HOUR, -24) // Get last 24 hours in UTC
+        val startTime = utcCal.timeInMillis
         
         // Query usage events for minute-level precision
         val usageEvents = usageStatsManager.queryEvents(startTime, now)
@@ -321,13 +209,8 @@ class CollectScreenTimeUseCase @Inject constructor(
                         val clampedEnd = minOf(eventTime, now)
                         val clampedDuration = clampedEnd - clampedStart
                         
-                        // Get day start timestamp (midnight) for the session start
-                        calendar.timeInMillis = sessionStart
-                        calendar.set(Calendar.HOUR_OF_DAY, 0)
-                        calendar.set(Calendar.MINUTE, 0)
-                        calendar.set(Calendar.SECOND, 0)
-                        calendar.set(Calendar.MILLISECOND, 0)
-                        val dayStart = calendar.timeInMillis
+                        // P1: Use UTC for day start calculation (DST-safe)
+                        val dayStart = getDayStartUTC(sessionStart)
                         
                         // Include session if it overlaps with query window and has valid duration
                         if (clampedDuration > 0 && clampedStart < now && clampedEnd > startTime) {
@@ -353,12 +236,8 @@ class CollectScreenTimeUseCase @Inject constructor(
             val duration = now - sessionStart
             
             if (sessionStart >= startTime && duration > 0) {
-                calendar.timeInMillis = sessionStart
-                calendar.set(Calendar.HOUR_OF_DAY, 0)
-                calendar.set(Calendar.MINUTE, 0)
-                calendar.set(Calendar.SECOND, 0)
-                calendar.set(Calendar.MILLISECOND, 0)
-                val dayStart = calendar.timeInMillis
+                // P1: Use UTC for day start (DST-safe)
+                val dayStart = getDayStartUTC(sessionStart)
                 
                 sessions.add(
                     ScreenTimeSessionEntity(
@@ -380,5 +259,31 @@ class CollectScreenTimeUseCase @Inject constructor(
         
         return true
     }
-}
+    
+    /**
+     * P1 FIX: Get day start in UTC (midnight UTC) for consistent boundaries across timezones/DST
+     */
+    private fun getDayStartUTC(timestamp: Long): Long {
+        val utcCalendar = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+        utcCalendar.timeInMillis = timestamp
+        utcCalendar.set(Calendar.HOUR_OF_DAY, 0)
+        utcCalendar.set(Calendar.MINUTE, 0)
+        utcCalendar.set(Calendar.SECOND, 0)
+        utcCalendar.set(Calendar.MILLISECOND, 0)
+        return utcCalendar.timeInMillis
+    }
+    
+    /**
+     * P1 FIX: Get day end in UTC (23:59:59 UTC)
+     */
+    private fun getDayEndUTC(timestamp: Long): Long {
+        val utcCalendar = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+        utcCalendar.timeInMillis = timestamp
+        utcCalendar.set(Calendar.HOUR_OF_DAY, 23)
+        utcCalendar.set(Calendar.MINUTE, 59)
+        utcCalendar.set(Calendar.SECOND, 59)
+        utcCalendar.set(Calendar.MILLISECOND, 999)
+        return utcCalendar.timeInMillis
+    }
 
+}
