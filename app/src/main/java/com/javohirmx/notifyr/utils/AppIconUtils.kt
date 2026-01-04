@@ -235,7 +235,14 @@ object AppIconUtils {
         val density = androidx.compose.ui.platform.LocalDensity.current
         val sizePx = with(density) { (sizeDp * 2f).roundToPx() } // 2x for high quality
         
-        return remember(packageName, sizePx) {
+        // Get package version code to include in remember key - this ensures recomputation when app is updated
+        val packageVersion = try {
+            packageManager.getPackageInfo(packageName, 0)?.longVersionCode ?: 0L
+        } catch (e: Exception) {
+            0L // If package not found, use 0
+        }
+        
+        return remember(packageName, sizePx, packageVersion) {
             // Validate package name first
             if (packageName.isBlank()) {
                 android.util.Log.w("AppIconUtils", "Blank package name provided")

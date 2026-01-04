@@ -55,24 +55,18 @@ fun BottomNavigationBar(navController: NavController) {
                 label = { Text(item.title) },
                 selected = selectedRoute == item.route,
                 onClick = {
-                    if (selectedRoute != item.route) {
-                        // Try to pop back to the target route first
-                        // popBackStack returns false if the route is not in the stack
-                        val popped = navController.popBackStack(item.route, inclusive = false)
-                        
-                        if (!popped) {
-                            // Route not in stack, navigate to it
-                            navController.navigate(item.route) {
-                                // Pop up to the start destination to avoid building up a large stack
-                                popUpTo(navController.graph.startDestinationId) {
-                                    saveState = true
-                                }
-                                // Avoid multiple copies of the same destination
-                                launchSingleTop = true
-                                // Restore state when reselecting a previously selected item
-                                restoreState = true
-                            }
+                    // Always navigate to the main screen, even if already selected
+                    // This ensures clicking a navbar item always goes to the main screen
+                    navController.navigate(item.route) {
+                        // Pop back to the route (inclusive = false keeps the route, clears nested routes above it)
+                        // If route not in stack, popUpTo will just navigate normally
+                        popUpTo(navController.graph.startDestinationId) {
+                            saveState = false // Don't save state, we want fresh main screen
                         }
+                        // If already on the route, replace it to refresh
+                        launchSingleTop = true
+                        // Don't restore state - always show fresh main screen
+                        restoreState = false
                     }
                 }
             )

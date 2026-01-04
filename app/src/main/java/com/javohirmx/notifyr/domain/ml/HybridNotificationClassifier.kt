@@ -1,7 +1,9 @@
 package com.javohirmx.notifyr.domain.ml
 
 import android.util.Log
+import com.javohirmx.notifyr.data.repository.AppRulesRepository
 import com.javohirmx.notifyr.data.repository.NotificationRepository
+import com.javohirmx.notifyr.domain.model.AppRuleType
 import com.javohirmx.notifyr.domain.model.NotificationData
 import com.javohirmx.notifyr.domain.model.NotificationImportance
 import com.javohirmx.notifyr.domain.rules.EnhancedNotificationRulesEngine
@@ -21,7 +23,8 @@ class HybridNotificationClassifier @Inject constructor(
     private val rulesEngine: NotificationRulesEngine,
     private val enhancedRulesEngine: EnhancedNotificationRulesEngine,
     private val mlClassifier: SmartNotificationClassifier,
-    private val notificationRepository: NotificationRepository
+    private val notificationRepository: NotificationRepository,
+    private val appRulesRepository: AppRulesRepository
 ) {
     
     companion object {
@@ -39,7 +42,18 @@ class HybridNotificationClassifier @Inject constructor(
         val rulesClassified = rulesEngine.classifyNotification(notification)
         val enhancedClassified = enhancedRulesEngine.classifyNotificationWithTags(rulesClassified)
         
-        // 2. If ML is enabled and model is trained, get ML prediction
+        // 2. Check if there's a user-defined app rule that should take absolute priority
+        val appRule = appRulesRepository.getAppRule(notification.packageName)
+        val hasUserDefinedRule = appRule != null && appRule.isEnabled && 
+            (appRule.ruleType == AppRuleType.ALWAYS_URGENT || appRule.ruleType == AppRuleType.ALWAYS_IGNORE)
+        
+        // If user-defined rule exists, skip ML and use rules-based result
+        if (hasUserDefinedRule && appRule != null) {
+            Log.d(TAG, "User-defined app rule active (${appRule.ruleType}) for ${notification.packageName}, skipping ML classification")
+            return enhancedClassified
+        }
+        
+        // 3. If ML is enabled and model is trained, get ML prediction
         if (mlEnabled && mlClassifier.getModelStats().isModelTrained) {
             try {
                 // Get conversation history for better context
@@ -59,11 +73,12 @@ class HybridNotificationClassifier @Inject constructor(
                     conversationHistory
                 )
                 
-                // 3. Decide which classification to use
+                // 4. Decide which classification to use
                 val finalImportance = decideClassification(
                     rulesImportance = enhancedClassified.importance,
                     mlImportance = mlImportance,
-                    mlConfidence = confidence
+                    mlConfidence = confidence,
+                    hasUserDefinedRule = false // Already checked above, but pass for safety
                 )
                 
                 Log.d(TAG, "Hybrid: Rules=${ enhancedClassified.importance}, ML=$mlImportance ($confidence), Final=$finalImportance")
@@ -75,7 +90,7 @@ class HybridNotificationClassifier @Inject constructor(
             }
         }
         
-        // 4. If ML disabled or not trained, use rules only
+        // 5. If ML disabled or not trained, use rules only
         return enhancedClassified
     }
     
@@ -210,8 +225,15 @@ class HybridNotificationClassifier @Inject constructor(
     private fun decideClassification(
         rulesImportance: NotificationImportance,
         mlImportance: NotificationImportance,
-        mlConfidence: Float
+        mlConfidence: Float,
+        hasUserDefinedRule: Boolean = false
     ): NotificationImportance {
+        
+        // If rules came from a user-defined rule, never override
+        if (hasUserDefinedRule) {
+            Log.d(TAG, "User-defined rule active, using rules importance: $rulesImportance")
+            return rulesImportance
+        }
         
         // Strategy: Use ML when confident, otherwise trust rules
         return when {

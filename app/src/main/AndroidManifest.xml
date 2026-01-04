@@ -58,6 +58,18 @@
             android:name=".service.NotificationActionReceiver"
             android:exported="false" />
         
+        <!-- Package Update Receiver - Clears icon cache when apps are updated -->
+        <receiver
+            android:name=".service.PackageUpdateReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.PACKAGE_ADDED" />
+                <action android:name="android.intent.action.PACKAGE_REMOVED" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
+        
         <!-- Notification Widget Provider -->
         <receiver
             android:name=".widget.NotificationWidgetProvider"

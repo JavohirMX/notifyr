@@ -561,18 +561,32 @@ fun NotificationGroupCard(
     var showImportanceMenu by remember { mutableStateOf(false) }
     var showTagEditDialog by remember { mutableStateOf(false) }
     
-    val onOpenApp = remember(group.packageName) {
+    val onOpenApp: () -> Unit = remember(group.packageName) {
         {
             try {
-                val launchIntent: Intent? = packageManager.getLaunchIntentForPackage(group.packageName)
-                if (launchIntent != null) {
-                    context.startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    // Mark all notifications in group as read when opening the app
-                    if (!group.isAllRead) {
-                        onMarkAllAsRead()
+                // Check if package exists before trying to launch
+                val packageExists = try {
+                    packageManager.getPackageInfo(group.packageName, 0)
+                    true
+                } catch (e: PackageManager.NameNotFoundException) {
+                    android.util.Log.d("HistoryScreen", "Package not found: ${group.packageName}")
+                    false
+                }
+                
+                if (packageExists) {
+                    val launchIntent: Intent? = packageManager.getLaunchIntentForPackage(group.packageName)
+                    if (launchIntent != null) {
+                        context.startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        // Mark all notifications in group as read when opening the app
+                        if (!group.isAllRead) {
+                            onMarkAllAsRead()
+                        }
                     }
                 }
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                android.util.Log.w("HistoryScreen", "Failed to open app: ${group.packageName}", e)
+            }
+            Unit // Explicitly return Unit
         }
     }
     
@@ -1039,18 +1053,32 @@ fun NotificationHistoryCard(
 ) {
     val context = LocalContext.current
     val packageManager = context.packageManager
-    val onOpenApp = remember(notification.packageName) {
+    val onOpenApp: () -> Unit = remember(notification.packageName) {
         {
             try {
-                val launchIntent: Intent? = packageManager.getLaunchIntentForPackage(notification.packageName)
-                if (launchIntent != null) {
-                    context.startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    // Mark notification as read when opening the app
-                    if (!notification.isRead) {
-                        onMarkAsRead()
+                // Check if package exists before trying to launch
+                val packageExists = try {
+                    packageManager.getPackageInfo(notification.packageName, 0)
+                    true
+                } catch (e: PackageManager.NameNotFoundException) {
+                    android.util.Log.d("HistoryScreen", "Package not found: ${notification.packageName}")
+                    false
+                }
+                
+                if (packageExists) {
+                    val launchIntent: Intent? = packageManager.getLaunchIntentForPackage(notification.packageName)
+                    if (launchIntent != null) {
+                        context.startActivity(launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        // Mark notification as read when opening the app
+                        if (!notification.isRead) {
+                            onMarkAsRead()
+                        }
                     }
                 }
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                android.util.Log.w("HistoryScreen", "Failed to open app: ${notification.packageName}", e)
+            }
+            Unit // Explicitly return Unit
         }
     }
     
