@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import com.javohirmx.notifyr.data.datastore.AppSettings
 import com.javohirmx.notifyr.domain.model.AppRule
 import com.javohirmx.notifyr.domain.model.AppRuleType
+import com.javohirmx.notifyr.di.ApplicationScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -19,15 +20,25 @@ import javax.inject.Singleton
 
 @Singleton
 class AppRulesRepository @Inject constructor(
-    private val dataStore: DataStore<AppSettings>
+    private val dataStore: DataStore<AppSettings>,
+    @ApplicationScope private val appScope: CoroutineScope
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    
+    /**
+     * Secondary constructor used in unit tests or non-Hilt contexts.
+     * Falls back to its own application-level scope when one is not provided.
+     */
+    constructor(dataStore: DataStore<AppSettings>) : this(
+        dataStore,
+        CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    )
+    
     
     private val _appRules = MutableStateFlow<Map<String, AppRule>>(emptyMap())
     val appRules: StateFlow<Map<String, AppRule>> = _appRules.asStateFlow()
     
     init {
-        scope.launch {
+        appScope.launch {
             loadAppRules()
         }
     }
@@ -151,7 +162,7 @@ class AppRulesRepository @Inject constructor(
         _appRules.value = currentRules
         
         // Persist changes
-        scope.launch {
+        appScope.launch {
             saveAppRules()
         }
     }
@@ -161,7 +172,7 @@ class AppRulesRepository @Inject constructor(
         currentRules.remove(packageName)
         _appRules.value = currentRules
         
-        scope.launch {
+        appScope.launch {
             saveAppRules()
         }
     }
@@ -169,13 +180,13 @@ class AppRulesRepository @Inject constructor(
     fun clearAllRules() {
         _appRules.value = emptyMap()
         
-        scope.launch {
+        appScope.launch {
             saveAppRules()
         }
     }
     
     fun resetToDefaults() {
-        scope.launch {
+        appScope.launch {
             initializeDefaultRules()
             saveAppRules()
         }
@@ -189,7 +200,7 @@ class AppRulesRepository @Inject constructor(
         val rulesMap = appRules.associateBy { it.packageName }
         _appRules.value = rulesMap
         
-        scope.launch {
+        appScope.launch {
             saveAppRules()
         }
     }

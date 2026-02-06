@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import com.javohirmx.notifyr.data.datastore.AppSettings
 import com.javohirmx.notifyr.domain.model.TemporaryAppStatus
 import com.javohirmx.notifyr.domain.model.TemporaryStatus
+import com.javohirmx.notifyr.di.ApplicationScope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,9 +22,18 @@ import javax.inject.Singleton
 
 @Singleton
 class TemporaryAppStatusRepository @Inject constructor(
-    private val dataStore: DataStore<AppSettings>
+    private val dataStore: DataStore<AppSettings>,
+    @ApplicationScope private val appScope: CoroutineScope
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    
+    /**
+     * Secondary constructor for tests or non-Hilt usage.
+     * Creates its own background scope when an application scope is not injected.
+     */
+    constructor(dataStore: DataStore<AppSettings>) : this(
+        dataStore,
+        CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    )
     
     private val _temporaryStatuses = MutableStateFlow<Map<String, TemporaryAppStatus>>(emptyMap())
     val temporaryStatuses: StateFlow<Map<String, TemporaryAppStatus>> = _temporaryStatuses.asStateFlow()
@@ -35,13 +45,13 @@ class TemporaryAppStatusRepository @Inject constructor(
             statuses.filter { (_, status) -> status.expiresAt > now }
         }
         .stateIn(
-            scope = scope,
+            scope = appScope,
             started = kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5000),
             initialValue = emptyMap()
         )
     
     init {
-        scope.launch {
+        appScope.launch {
             loadTemporaryStatuses()
         }
     }
@@ -97,7 +107,7 @@ class TemporaryAppStatusRepository @Inject constructor(
         currentStatuses[packageName] = temporaryStatus
         _temporaryStatuses.value = currentStatuses
         
-        scope.launch {
+        appScope.launch {
             saveTemporaryStatuses()
         }
     }
@@ -123,7 +133,7 @@ class TemporaryAppStatusRepository @Inject constructor(
         currentStatuses.remove(packageName)
         _temporaryStatuses.value = currentStatuses
         
-        scope.launch {
+        appScope.launch {
             saveTemporaryStatuses()
         }
     }
@@ -134,7 +144,7 @@ class TemporaryAppStatusRepository @Inject constructor(
         
         if (activeStatuses.size != _temporaryStatuses.value.size) {
             _temporaryStatuses.value = activeStatuses
-            scope.launch {
+            appScope.launch {
                 saveTemporaryStatuses()
             }
         }

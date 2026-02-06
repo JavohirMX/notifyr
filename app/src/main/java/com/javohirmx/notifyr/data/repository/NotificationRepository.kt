@@ -11,8 +11,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.text.Normalizer
 import kotlin.math.max
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class NotificationRepository(
+@Singleton
+class NotificationRepository @Inject constructor(
     private val notificationDao: NotificationDao
 ) {
     // Mutex for preventing race conditions in timestamp updates
@@ -144,7 +147,9 @@ class NotificationRepository(
             // For empty notifications, check if there's a recent notification from same package
             // within a very short window (5 seconds)
             val veryRecentCutoff = since.coerceAtLeast(System.currentTimeMillis() - 5_000L)
-            val recentEmpty = notificationDao.findRecentNotificationsByPackage(packageName, veryRecentCutoff)
+            val recentList = notificationDao.findRecentNotificationsByPackage(packageName, veryRecentCutoff)
+                ?: emptyList()
+            val recentEmpty = recentList
                 .map { it.toDomain() }
                 .firstOrNull { existing ->
                     normalizeText(existing.title).isEmpty() && 
@@ -155,7 +160,9 @@ class NotificationRepository(
         
         // Limit the number of notifications loaded for performance
         // Only load recent notifications (last 100) to avoid memory issues
-        val recentNotifications = notificationDao.findRecentNotificationsByPackage(packageName, since)
+        val recentEntities = notificationDao.findRecentNotificationsByPackage(packageName, since)
+            ?: emptyList()
+        val recentNotifications = recentEntities
             .take(100) // Limit to 100 most recent for performance
             .map { it.toDomain() }
             .firstOrNull { existing ->

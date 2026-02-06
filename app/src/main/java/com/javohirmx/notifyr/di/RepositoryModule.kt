@@ -16,15 +16,7 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object RepositoryModule {
-    
-    @Provides
-    @Singleton
-    fun provideNotificationRepository(
-        notificationDao: NotificationDao
-    ): NotificationRepository {
-        return NotificationRepository(notificationDao)
-    }
-    
+
     @Provides
     @Singleton
     fun provideScreenTimeRepository(

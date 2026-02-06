@@ -48,11 +48,10 @@ class EnhancedNotificationRulesEngine @Inject constructor(
         "com.google.android.apps.messaging",
         "com.samsung.android.messaging",
         "com.facebook.orca",
-        "org.signalapp.signal"
+        "org.thoughtcrime.securesms"
     )
     
     private val emailApps = setOf(
-        "com.google.android.apps.gmail",
         "com.google.android.gm",
         "com.microsoft.office.outlook",
         "com.yahoo.mobile.client.android.mail",
@@ -196,7 +195,7 @@ class EnhancedNotificationRulesEngine @Inject constructor(
         
         // Check user-defined app rules
         val appRule = appRulesRepository.getAppRule(notification.packageName)
-        if (appRule != null) {
+        if (appRule != null && appRule.isEnabled) {
             return when (appRule.ruleType) {
                 AppRuleType.DONT_INTERCEPT -> Priority.NORMAL  // No priority change for don't intercept
                 AppRuleType.ALWAYS_URGENT -> Priority.IMPORTANT

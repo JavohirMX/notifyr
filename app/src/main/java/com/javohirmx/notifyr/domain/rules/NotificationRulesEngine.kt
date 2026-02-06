@@ -18,7 +18,14 @@ class NotificationRulesEngine @Inject constructor(
     private val defaultUrgentKeywords = listOf(
         "urgent", "asap", "emergency", "important", "critical", "help",
         "meeting", "call me", "deadline", "breaking", "alert", "warning",
-        "security", "fraud", "suspicious", "verify", "confirm", "action required"
+        "security", "fraud", "suspicious", "verify", "confirm", "action required",
+        "sos", "immediately"
+    )
+    
+    // Default ignore keywords
+    private val defaultIgnoreKeywords = listOf(
+        "unsubscribe", "promotion", "sale", "discount", "spam", "marketing", "promo",
+        "newsletter", "offers"
     )
     
     // Default banking/financial app packages (always urgent)
@@ -177,6 +184,13 @@ class NotificationRulesEngine @Inject constructor(
             }
         }
         
+        // Fallback to default ignore keywords
+        for (keyword in defaultIgnoreKeywords) {
+            if (content.contains(keyword.lowercase())) {
+                return NotificationImportance.IGNORE
+            }
+        }
+        
         return null // No keyword match found
     }
     
@@ -203,7 +217,7 @@ class NotificationRulesEngine @Inject constructor(
             "com.google.android.apps.messaging",
             "com.samsung.android.messaging",
             "com.facebook.orca", // Messenger
-            "org.signal.messenger"
+            "org.thoughtcrime.securesms"
         )
         return messagingApps.contains(packageName)
     }

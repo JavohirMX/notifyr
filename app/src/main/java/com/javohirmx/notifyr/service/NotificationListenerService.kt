@@ -49,12 +49,13 @@ class NotificationListenerService : NotificationListenerService() {
     @Inject
     lateinit var digestScheduler: SmartDigestScheduler
     
-    private val serviceJob = SupervisorJob()
-    private val serviceScope = CoroutineScope(serviceJob + Dispatchers.IO)
-    
     // For preventing race conditions
     private val processingKeys = mutableSetOf<String>()
     private val processingMutex = Mutex()
+    
+    // Service coroutine scope for async operations
+    private val serviceJob = SupervisorJob()
+    private val serviceScope = CoroutineScope(Dispatchers.IO + serviceJob)
     
     companion object {
         private const val TAG = "NotificationListener"
@@ -69,10 +70,18 @@ class NotificationListenerService : NotificationListenerService() {
     override fun onDestroy() {
         super.onDestroy()
         digestScheduler.shutdown()
-        serviceJob.cancel() // Cancel all coroutines
         
-        // Clear processing keys
-        processingKeys.clear()
+        // Cancel all coroutines
+        serviceJob.cancel()
+        
+        // Clear processing keys to prevent memory leaks
+        if (processingMutex.tryLock()) {
+            try {
+                processingKeys.clear()
+            } finally {
+                processingMutex.unlock()
+            }
+        }
     }
     
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
@@ -156,12 +165,10 @@ class NotificationListenerService : NotificationListenerService() {
             // Use enhancedRulesEngine to extract these fields without full classification
             val enhancedData = enhancedRulesEngine.classifyNotificationWithTags(baseNotificationData)
             
-            serviceScope.launch {
-                // Check if this is a continuous notification even in DONT_INTERCEPT mode
-                val isContinuous = isContinuousNotification(notification, category)
-                val dedupWindow = if (isContinuous) 5 * 60_000L else 60_000L
-                notificationRepository.upsertWithDedup(enhancedData, dedupWindow, isContinuous = isContinuous)
-            }
+            // Check if this is a continuous notification even in DONT_INTERCEPT mode
+            val isContinuous = isContinuousNotification(notification, category)
+            val dedupWindow = if (isContinuous) 5 * 60_000L else 60_000L
+            notificationRepository.upsertWithDedup(enhancedData, dedupWindow, isContinuous = isContinuous)
             return // Don't process further - let original notification through
         }
         

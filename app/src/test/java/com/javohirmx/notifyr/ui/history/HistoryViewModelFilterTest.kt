@@ -34,6 +34,7 @@ class HistoryViewModelFilterTest {
     private lateinit var appRulesRepository: com.javohirmx.notifyr.data.repository.AppRulesRepository
     private lateinit var hybridClassifier: HybridNotificationClassifier
     private lateinit var viewModel: HistoryViewModel
+    private lateinit var customTagRepository: com.javohirmx.notifyr.data.repository.CustomTagRepository
     
     @Before
     fun setup() {
@@ -42,6 +43,7 @@ class HistoryViewModelFilterTest {
         application = mock()
         notificationRepository = mock()
         appRulesRepository = mock()
+        customTagRepository = mock()
         groupNotificationsUseCase = GroupNotificationsUseCase()
         hybridClassifier = mock()
         
@@ -68,7 +70,8 @@ class HistoryViewModelFilterTest {
             notificationRepository,
             groupNotificationsUseCase,
             appRulesRepository,
-            hybridClassifier
+            hybridClassifier,
+            customTagRepository
         )
     }
     
