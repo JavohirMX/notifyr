@@ -38,6 +38,9 @@ class AppRulesRepository @Inject constructor(
     val appRules: StateFlow<Map<String, AppRule>> = _appRules.asStateFlow()
     
     init {
+        // Start with in-memory defaults immediately for deterministic behavior,
+        // then try to load any persisted rules from DataStore to override/merge.
+        initializeDefaultRules()
         appScope.launch {
             loadAppRules()
         }
@@ -46,15 +49,35 @@ class AppRulesRepository @Inject constructor(
     private suspend fun loadAppRules() {
         try {
             val settings = dataStore.data.first()
-            if (settings.appRulesJson.isNotEmpty() && settings.appRulesJson != "[]") {
-                val rules = Json.decodeFromString<List<AppRule>>(settings.appRulesJson)
-                _appRules.value = rules.associateBy { it.packageName }
+            val json = settings.appRulesJson
+            
+            if (json.isNotEmpty() && json != "[]") {
+                val persistedList = Json.decodeFromString<List<AppRule>>(json)
+                val persistedMap = persistedList.associateBy { it.packageName }
+                val currentMap = _appRules.value
+                
+                // Persisted rules take precedence by packageName, but we keep any
+                // additional in-memory defaults that don't exist in the persisted set.
+                val merged = mutableMapOf<String, AppRule>()
+                merged.putAll(persistedMap)
+                currentMap.values.forEach { rule ->
+                    if (!merged.containsKey(rule.packageName)) {
+                        merged[rule.packageName] = rule
+                    }
+                }
+                
+                _appRules.value = merged
             } else {
-                initializeDefaultRules()
+                // Only fall back to defaults if we truly have nothing loaded yet.
+                if (_appRules.value.isEmpty()) {
+                    initializeDefaultRules()
+                }
             }
         } catch (e: Exception) {
-            // On error, initialize with defaults
-            initializeDefaultRules()
+            // On error, only initialize defaults if nothing is in memory yet.
+            if (_appRules.value.isEmpty()) {
+                initializeDefaultRules()
+            }
         }
     }
     

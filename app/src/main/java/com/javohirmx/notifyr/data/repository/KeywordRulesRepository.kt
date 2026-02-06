@@ -36,15 +36,45 @@ class KeywordRulesRepository @Inject constructor(
     private suspend fun loadKeywordRules() {
         try {
             val settings = dataStore.data.first()
-            if (settings.keywordRulesJson.isNotEmpty() && settings.keywordRulesJson != "[]") {
-                val rules = Json.decodeFromString<List<KeywordRule>>(settings.keywordRulesJson)
-                _keywordRules.value = rules
+            val json = settings.keywordRulesJson
+            
+            if (json.isNotEmpty() && json != "[]") {
+                // We have previously persisted keywords – merge them with whatever
+                // is currently in memory so we don't clobber rules that may have
+                // been added before this load completes (important for tests and
+                // for any early in-memory mutations).
+                val persistedRules = Json.decodeFromString<List<KeywordRule>>(json)
+                val currentRules = _keywordRules.value
+                
+                // Persisted rules take precedence by keyword (case-insensitive),
+                // but we keep any additional in-memory rules that don't exist
+                // in the persisted set.
+                val persistedByKey = persistedRules.associateBy { it.keyword.lowercase() }
+                val merged = buildList {
+                    addAll(persistedRules)
+                    currentRules.forEach { rule ->
+                        val key = rule.keyword.lowercase()
+                        if (!persistedByKey.containsKey(key)) {
+                            add(rule)
+                        }
+                    }
+                }
+                
+                _keywordRules.value = merged.sortedWith(
+                    compareBy<KeywordRule> { it.importance.ordinal }
+                        .thenBy { it.keyword.lowercase() }
+                )
             } else {
-                initializeDefaultKeywords()
+                // Only fall back to defaults if we truly have nothing loaded yet.
+                if (_keywordRules.value.isEmpty()) {
+                    initializeDefaultKeywords()
+                }
             }
         } catch (e: Exception) {
-            // On error, initialize with defaults
-            initializeDefaultKeywords()
+            // On error, only initialize defaults if nothing is in memory yet.
+            if (_keywordRules.value.isEmpty()) {
+                initializeDefaultKeywords()
+            }
         }
     }
     

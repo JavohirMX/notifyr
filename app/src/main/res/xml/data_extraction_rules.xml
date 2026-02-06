@@ -5,9 +5,9 @@
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- Exclude volatile/shared preferences; include exported files directory -->
-        <exclude domain="sharedpref" path="/"/>
-        <include domain="file" path="/"/>
+        <!-- Only include app-specific exported files directory for backup. 
+             Shared preferences are excluded by simply not including them. -->
+        <include domain="file" path="."/>
     </cloud-backup>
     <!--
     <device-transfer>
