@@ -129,28 +129,27 @@ fun HistoryScreen(
             }
         },
         topBar = {
-            Column {
-                // Enhanced Search Bar
-                Surface(
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 3.dp
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 3.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     SearchBar(
                         query = searchQuery,
                         onQueryChange = viewModel::updateSearchQuery,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                        modifier = Modifier.weight(1f)
+                    )
+                    FilterActionButton(
+                        activeFilterCount = filterState.activeCount,
+                        onClick = { showFilterSheet = true }
                     )
                 }
-                
-                // Filter Row
-                FilterRow(
-                    filterState = filterState,
-                    availableApps = uiState.availableApps,
-                    onFilterClick = { showFilterSheet = true },
-                    onClearFilters = viewModel::clearFilters
-                )
             }
         }
     ) { paddingValues ->
@@ -395,6 +394,29 @@ fun SearchBar(
             disabledIndicatorColor = Color.Transparent,
         )
     )
+}
+
+@Composable
+private fun FilterActionButton(
+    activeFilterCount: Int,
+    onClick: () -> Unit
+) {
+    FilledTonalIconButton(onClick = onClick) {
+        BadgedBox(
+            badge = {
+                if (activeFilterCount > 0) {
+                    Badge {
+                        Text(text = "$activeFilterCount")
+                    }
+                }
+            }
+        ) {
+            Icon(
+                imageVector = Icons.Default.FilterList,
+                contentDescription = "Open filters"
+            )
+        }
+    }
 }
 
 @Composable
