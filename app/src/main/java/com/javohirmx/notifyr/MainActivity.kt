@@ -14,16 +14,24 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
+import com.javohirmx.notifyr.data.repository.AppLockRepository
 import com.javohirmx.notifyr.ui.components.BottomNavigationBar
 import com.javohirmx.notifyr.ui.navigation.NotifyrNavigation
 import com.javohirmx.notifyr.ui.navigation.Screen
+import com.javohirmx.notifyr.ui.security.AppLockGate
+import com.javohirmx.notifyr.ui.security.AppLockViewModel
 import com.javohirmx.notifyr.ui.theme.NotifyrTheme
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.navigation.compose.currentBackStackEntryAsState
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject
+    lateinit var appLockRepository: AppLockRepository
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -33,10 +41,17 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onStart() {
+        super.onStart()
+        appLockRepository.onAppForegrounded()
+    }
 }
 
 @Composable
 fun NotifyrApp() {
+    val appLockViewModel: AppLockViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    val appLockState by appLockViewModel.uiState.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     var startDestination by remember { mutableStateOf<String?>(null) }
     var isOnboardingCompleted by remember { mutableStateOf(false) }
@@ -95,6 +110,19 @@ fun NotifyrApp() {
         // Use currentRoute as primary source of truth for isOnboarding
         // Only check currentRoute, not destination (which can be stale)
         val isOnboarding = currentRoute == Screen.Onboarding.route
+        val shouldShowLock = !isOnboarding &&
+            appLockState.lockEnabled &&
+            appLockState.hasPin &&
+            appLockState.isLocked
+
+        if (shouldShowLock) {
+            AppLockGate(
+                uiState = appLockState,
+                onUnlockWithPin = appLockViewModel::verifyPinAndUnlock,
+                onUnlockWithBiometric = appLockViewModel::unlockSession
+            )
+            return@let
+        }
         
         if (isOnboarding) {
             // Show onboarding without bottom navigation

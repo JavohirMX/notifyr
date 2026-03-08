@@ -81,6 +81,17 @@ fun SettingsScreen(
                 onClick = viewModel::requestNotificationListenerPermission
             )
         }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        SettingsSection(title = "Security") {
+            SettingCard(
+                title = "App Lock",
+                description = "Protect app access with PIN and biometrics",
+                icon = Icons.Default.Lock,
+                onClick = { navController.navigate(Screen.AppLockSettings.route) }
+            )
+        }
         
         Spacer(modifier = Modifier.height(24.dp))
         

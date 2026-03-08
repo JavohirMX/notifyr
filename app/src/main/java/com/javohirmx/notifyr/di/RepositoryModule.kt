@@ -5,6 +5,8 @@ import com.javohirmx.notifyr.data.database.ScreenTimeDao
 import com.javohirmx.notifyr.data.database.ScreenTimeSessionDao
 import com.javohirmx.notifyr.data.repository.NotificationRepository
 import com.javohirmx.notifyr.data.repository.ScreenTimeRepository
+import com.javohirmx.notifyr.data.security.EncryptedPinCredentialStore
+import com.javohirmx.notifyr.data.security.PinCredentialStore
 import com.javohirmx.notifyr.domain.usecase.GroupNotificationsUseCase
 import com.javohirmx.notifyr.widget.WidgetRepository
 import dagger.Module
@@ -16,6 +18,14 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object RepositoryModule {
+
+    @Provides
+    @Singleton
+    fun providePinCredentialStore(
+        encryptedPinCredentialStore: EncryptedPinCredentialStore
+    ): PinCredentialStore {
+        return encryptedPinCredentialStore
+    }
 
     @Provides
     @Singleton

@@ -76,6 +76,9 @@ dependencies {
     
     // Preferences DataStore
     implementation(libs.androidx.datastore.preferences)
+
+    // Security
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
     
     // Serialization for export/import
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")

@@ -14,7 +14,10 @@ data class AppSettings(
     val focusModeSettingsJson: String = "{}",
     val digestSettingsJson: String = "{}",
     val keywordRulesJson: String = "[]",
-    val temporaryStatusesJson: String = "[]"
+    val temporaryStatusesJson: String = "[]",
+    val appLockEnabled: Boolean = false,
+    val appLockBiometricEnabled: Boolean = true,
+    val appLockTimeoutSeconds: Int = 60
 )
 
 object SettingsSerializer : Serializer<AppSettings> {
