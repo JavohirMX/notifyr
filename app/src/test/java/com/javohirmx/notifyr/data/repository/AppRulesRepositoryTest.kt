@@ -120,6 +120,32 @@ class AppRulesRepositoryTest {
         assertThat(rule?.appName).isEqualTo(appName)
         assertThat(rule?.ruleType).isEqualTo(ruleType)
     }
+
+    @Test
+    fun `setAppRule should store custom sync phrases and preserve on toggle`() = runTest {
+        val packageName = "com.example.syncapp"
+        val appName = "Sync App"
+        val phrases = listOf("refreshing channel state", "checking new feed")
+
+        repository.setAppRule(
+            packageName = packageName,
+            appName = appName,
+            ruleType = AppRuleType.ALWAYS_DROP_SYNC_STATUS,
+            isEnabled = true,
+            syncStatusPhrases = phrases
+        )
+
+        repository.setAppRule(
+            packageName = packageName,
+            appName = appName,
+            ruleType = AppRuleType.ALWAYS_DROP_SYNC_STATUS,
+            isEnabled = false
+        )
+
+        val rule = repository.appRules.first()[packageName]
+        assertThat(rule?.syncStatusPhrases).containsExactly("refreshing channel state", "checking new feed")
+        assertThat(rule?.isEnabled).isFalse()
+    }
     
     @Test
     fun `removeAppRule should remove existing rule`() = runTest {

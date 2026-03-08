@@ -329,7 +329,7 @@ fun HistoryScreen(
                 app = AppInfo(packageName, appName),
                 currentRule = null, // Could load current rule if needed
                 onDismiss = { showAppRuleDialog = false },
-                onSelectRule = { ruleType ->
+                onSelectRule = { ruleType, _ ->
                     viewModel.setAppRule(packageName, appName, ruleType)
                     showAppRuleDialog = false
                 },
@@ -365,7 +365,7 @@ fun SearchBar(
         modifier = modifier,
         placeholder = { 
             Text(
-                "Search by app, title, or content...",
+                "Search ...",
                 style = MaterialTheme.typography.bodyMedium
             ) 
         },

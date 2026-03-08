@@ -56,10 +56,17 @@ class AppRulesViewModel @Inject constructor(
         packageName: String,
         appName: String,
         ruleType: AppRuleType,
-        isEnabled: Boolean = true
+        isEnabled: Boolean = true,
+        syncStatusPhrases: List<String>? = null
     ) {
         viewModelScope.launch {
-            appRulesRepository.setAppRule(packageName, appName, ruleType, isEnabled)
+            appRulesRepository.setAppRule(
+                packageName = packageName,
+                appName = appName,
+                ruleType = ruleType,
+                isEnabled = isEnabled,
+                syncStatusPhrases = syncStatusPhrases
+            )
         }
     }
     

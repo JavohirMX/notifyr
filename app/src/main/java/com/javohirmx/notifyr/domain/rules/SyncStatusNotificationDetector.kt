@@ -45,7 +45,10 @@ class SyncStatusNotificationDetector @Inject constructor() {
         "notifications"
     )
 
-    fun isSyncStatusNotification(notification: NotificationData): Boolean {
+    fun isSyncStatusNotification(
+        notification: NotificationData,
+        additionalPhrases: List<String> = emptyList()
+    ): Boolean {
         val content = listOf(notification.title, notification.text)
             .joinToString(" ")
             .trim()
@@ -54,6 +57,14 @@ class SyncStatusNotificationDetector @Inject constructor() {
         if (content.isBlank()) return false
 
         if (exactStatusPhrases.any { content.contains(it) }) {
+            return true
+        }
+
+        val normalizedCustomPhrases = additionalPhrases
+            .map { it.trim().lowercase() }
+            .filter { it.isNotEmpty() }
+
+        if (normalizedCustomPhrases.any { content.contains(it) }) {
             return true
         }
 

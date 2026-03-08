@@ -8,13 +8,12 @@ import com.javohirmx.notifyr.data.repository.NotificationRepository
 import com.javohirmx.notifyr.domain.digest.SmartDigestScheduler
 import com.javohirmx.notifyr.domain.focus.FocusModeManager
 import com.javohirmx.notifyr.domain.model.AppRule
-import com.javohirmx.notifyr.domain.model.AppRuleType
 import com.javohirmx.notifyr.domain.model.NotificationData
 import com.javohirmx.notifyr.domain.model.NotificationImportance
 import com.javohirmx.notifyr.domain.model.shouldShowImmediately
 import com.javohirmx.notifyr.domain.rules.EnhancedNotificationRulesEngine
 import com.javohirmx.notifyr.domain.rules.NotificationRulesEngine
-import com.javohirmx.notifyr.domain.rules.SyncStatusNotificationDetector
+import com.javohirmx.notifyr.domain.rules.SyncStatusDropPolicy
 import com.javohirmx.notifyr.widget.WidgetUpdateHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -53,7 +52,7 @@ class NotificationListenerService : NotificationListenerService() {
     lateinit var digestScheduler: SmartDigestScheduler
 
     @Inject
-    lateinit var syncStatusNotificationDetector: SyncStatusNotificationDetector
+    lateinit var syncStatusDropPolicy: SyncStatusDropPolicy
     
     // For preventing race conditions
     private val processingKeys = mutableSetOf<String>()
@@ -392,14 +391,6 @@ class NotificationListenerService : NotificationListenerService() {
     }
 
     private fun shouldDropSyncStatusNotification(notification: NotificationData, appRule: AppRule?): Boolean {
-        if (appRule != null && appRule.isEnabled) {
-            when (appRule.ruleType) {
-                AppRuleType.ALWAYS_DROP_SYNC_STATUS -> return true
-                AppRuleType.NEVER_DROP_SYNC_STATUS -> return false
-                else -> Unit
-            }
-        }
-
-        return syncStatusNotificationDetector.isSyncStatusNotification(notification)
+        return syncStatusDropPolicy.shouldDrop(notification, appRule)
     }
 }

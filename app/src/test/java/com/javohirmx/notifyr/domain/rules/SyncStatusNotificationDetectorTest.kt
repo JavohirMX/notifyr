@@ -71,6 +71,40 @@ class SyncStatusNotificationDetectorTest {
         assertThat(detector.isSyncStatusNotification(notification)).isFalse()
     }
 
+    @Test
+    fun `should match app custom sync phrase when provided`() {
+        val notification = createNotification(
+            packageName = "com.example.custom",
+            appName = "Custom",
+            title = "Channel Service",
+            text = "Refreshing channel state"
+        )
+
+        assertThat(
+            detector.isSyncStatusNotification(
+                notification,
+                additionalPhrases = listOf("refreshing channel state")
+            )
+        ).isTrue()
+    }
+
+    @Test
+    fun `should not match app custom sync phrase for different text`() {
+        val notification = createNotification(
+            packageName = "com.example.custom",
+            appName = "Custom",
+            title = "Channel Service",
+            text = "New message from Sam"
+        )
+
+        assertThat(
+            detector.isSyncStatusNotification(
+                notification,
+                additionalPhrases = listOf("refreshing channel state")
+            )
+        ).isFalse()
+    }
+
     private fun createNotification(
         packageName: String,
         appName: String,

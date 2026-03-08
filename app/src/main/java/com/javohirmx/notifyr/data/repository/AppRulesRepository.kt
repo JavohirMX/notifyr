@@ -168,8 +168,15 @@ class AppRulesRepository @Inject constructor(
         return _appRules.value.values.toList()
     }
     
-    fun setAppRule(packageName: String, appName: String, ruleType: AppRuleType?, isEnabled: Boolean = true) {
+    fun setAppRule(
+        packageName: String,
+        appName: String,
+        ruleType: AppRuleType?,
+        isEnabled: Boolean = true,
+        syncStatusPhrases: List<String>? = null
+    ) {
         val currentRules = _appRules.value.toMutableMap()
+        val existingRule = currentRules[packageName]
         
         if (ruleType == null) {
             currentRules.remove(packageName)
@@ -178,7 +185,8 @@ class AppRulesRepository @Inject constructor(
                 packageName = packageName,
                 appName = appName,
                 ruleType = ruleType,
-                isEnabled = isEnabled
+                isEnabled = isEnabled,
+                syncStatusPhrases = syncStatusPhrases ?: existingRule?.syncStatusPhrases ?: emptyList()
             )
         }
         

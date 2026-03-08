@@ -13,6 +13,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -181,12 +183,13 @@ fun AppRulesScreen(
             app = selectedApp!!,
             currentRule = uiState.rules[selectedApp!!.packageName],
             onDismiss = { showRuleDialog = false },
-            onSelectRule = { ruleType ->
+            onSelectRule = { ruleType, syncStatusPhrases ->
                 viewModel.updateAppRule(
                     selectedApp!!.packageName,
                     selectedApp!!.appName,
                     ruleType,
-                    true
+                    true,
+                    syncStatusPhrases
                 )
                 showRuleDialog = false
             },
@@ -462,10 +465,18 @@ fun AppRuleDialog(
     app: AppInfo,
     currentRule: AppRule?,
     onDismiss: () -> Unit,
-    onSelectRule: (AppRuleType) -> Unit,
+    onSelectRule: (AppRuleType, List<String>) -> Unit,
     onRemoveRule: () -> Unit,
     onSetTemporaryStatus: () -> Unit
 ) {
+    var selectedRuleType by remember {
+        mutableStateOf(currentRule?.ruleType ?: AppRuleType.FILTER_KEYWORDS)
+    }
+    var syncPhraseInput by remember {
+        mutableStateOf(currentRule?.syncStatusPhrases?.joinToString("\n").orEmpty())
+    }
+    val phraseInputFocusRequester = remember { FocusRequester() }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -483,8 +494,28 @@ fun AppRuleDialog(
                 AppRuleType.entries.forEach { ruleType ->
                     RuleOptionCard(
                         ruleType = ruleType,
-                        isSelected = currentRule?.ruleType == ruleType,
-                        onClick = { onSelectRule(ruleType) }
+                        isSelected = selectedRuleType == ruleType,
+                        onClick = { selectedRuleType = ruleType }
+                    )
+                }
+
+                if (selectedRuleType == AppRuleType.ALWAYS_DROP_SYNC_STATUS) {
+                    Text(
+                        text = "Optional custom sync phrases (one per line)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = syncPhraseInput,
+                        onValueChange = { syncPhraseInput = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 96.dp)
+                            .focusRequester(phraseInputFocusRequester),
+                        placeholder = {
+                            Text("Example:\nrefreshing channel state\nchecking new feed")
+                        }
                     )
                 }
                 
@@ -520,8 +551,24 @@ fun AppRuleDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel")
+                }
+
+                Button(
+                    onClick = {
+                        val parsedPhrases = syncPhraseInput
+                            .lineSequence()
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() }
+                            .distinct()
+                            .toList()
+                        onSelectRule(selectedRuleType, parsedPhrases)
+                    }
+                ) {
+                    Text("Save")
+                }
             }
         }
     )
