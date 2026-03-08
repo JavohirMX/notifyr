@@ -4,8 +4,6 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
-import android.widget.RemoteViews
-import com.javohirmx.notifyr.R
 
 /**
  * Widget provider for notification widget
@@ -71,11 +69,7 @@ class NotificationWidgetProvider : AppWidgetProvider() {
             appWidgetManager: AppWidgetManager,
             appWidgetId: Int
         ) {
-            // Start update service to fetch data and update widget
-            val intent = Intent(context, NotificationWidgetUpdateService::class.java).apply {
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-            }
-            context.startService(intent)
+            NotificationWidgetUpdateService.enqueueUpdate(context, appWidgetId)
         }
         
         /**

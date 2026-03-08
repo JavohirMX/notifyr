@@ -4,6 +4,7 @@ import android.app.Service
 import android.appwidget.AppWidgetManager
 import android.content.Intent
 import android.os.IBinder
+import android.util.Log
 import android.widget.RemoteViews
 import com.javohirmx.notifyr.R
 import com.javohirmx.notifyr.domain.model.formatDuration
@@ -13,6 +14,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
@@ -27,7 +29,7 @@ class ScreenTimeWidgetUpdateService : Service() {
     @Inject
     lateinit var widgetRepository: WidgetRepository
     
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     override fun onBind(intent: Intent?): IBinder? = null
     
@@ -51,7 +53,9 @@ class ScreenTimeWidgetUpdateService : Service() {
     
     private suspend fun updateWidget(appWidgetId: Int) {
         val appWidgetManager = AppWidgetManager.getInstance(this)
-        val dailyData = widgetRepository.getLast7DaysScreenTime()
+        val dailyData = withContext(Dispatchers.IO) {
+            widgetRepository.getLast7DaysScreenTime()
+        }
         
         // Determine widget size and update accordingly
         val options = appWidgetManager.getAppWidgetOptions(appWidgetId)
@@ -96,13 +100,15 @@ class ScreenTimeWidgetUpdateService : Service() {
         val appIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        val appPendingIntent = android.app.PendingIntent.getActivity(
-            this,
-            appWidgetId,
-            appIntent,
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-        )
-        views.setOnClickPendingIntent(R.id.widget_container, appPendingIntent)
+        if (appIntent != null) {
+            val appPendingIntent = android.app.PendingIntent.getActivity(
+                this,
+                appWidgetId,
+                appIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            views.setOnClickPendingIntent(R.id.widget_container, appPendingIntent)
+        }
         
         appWidgetManager.updateAppWidget(appWidgetId, views)
     }
@@ -111,16 +117,16 @@ class ScreenTimeWidgetUpdateService : Service() {
         // Show today's total
         val today = dailyData.firstOrNull()
         if (today != null) {
-            views.setTextViewText(R.id.widget_title, "Today")
+            views.setTextViewText(R.id.widget_title, getString(R.string.widget_screen_time_today))
             views.setTextViewText(R.id.widget_total_time, formatDuration(today.totalDurationMs))
         } else {
-            views.setTextViewText(R.id.widget_title, "Screen Time")
-            views.setTextViewText(R.id.widget_total_time, "0h")
+            views.setTextViewText(R.id.widget_title, getString(R.string.widget_screen_time))
+            views.setTextViewText(R.id.widget_total_time, getString(R.string.widget_screen_time_zero))
         }
     }
     
     private fun updateMediumWidget(views: RemoteViews, dailyData: List<com.javohirmx.notifyr.domain.model.DailyScreenTime>) {
-        views.setTextViewText(R.id.widget_title, "Last 7 Days")
+        views.setTextViewText(R.id.widget_title, getString(R.string.widget_screen_time_last_7_days))
         
         // Show last 3-4 days
         val displayCount = minOf(dailyData.size, 4)
@@ -137,7 +143,7 @@ class ScreenTimeWidgetUpdateService : Service() {
             itemId?.let { id ->
                 val dayLabel = formatDayLabel(day.date, i == 0)
                 val duration = formatDuration(day.totalDurationMs)
-                views.setTextViewText(id, "$dayLabel: $duration")
+                views.setTextViewText(id, getString(R.string.widget_day_duration_format, dayLabel, duration))
                 views.setViewVisibility(id, android.view.View.VISIBLE)
             }
         }
@@ -156,7 +162,7 @@ class ScreenTimeWidgetUpdateService : Service() {
     }
     
     private fun updateLargeWidget(views: RemoteViews, dailyData: List<com.javohirmx.notifyr.domain.model.DailyScreenTime>) {
-        views.setTextViewText(R.id.widget_title, "Last 7 Days")
+        views.setTextViewText(R.id.widget_title, getString(R.string.widget_screen_time_last_7_days))
         
         // Show all 7 days
         val displayCount = minOf(dailyData.size, 7)
@@ -176,7 +182,7 @@ class ScreenTimeWidgetUpdateService : Service() {
             itemId?.let { id ->
                 val dayLabel = formatDayLabel(day.date, i == 0)
                 val duration = formatDuration(day.totalDurationMs)
-                views.setTextViewText(id, "$dayLabel: $duration")
+                views.setTextViewText(id, getString(R.string.widget_day_duration_format, dayLabel, duration))
                 views.setViewVisibility(id, android.view.View.VISIBLE)
             }
         }
@@ -199,7 +205,7 @@ class ScreenTimeWidgetUpdateService : Service() {
     
     private fun formatDayLabel(date: Long, isToday: Boolean): String {
         return if (isToday) {
-            "Today"
+            getString(R.string.widget_screen_time_today)
         } else {
             val sdf = SimpleDateFormat("EEE", Locale.getDefault())
             sdf.format(Date(date))
@@ -209,6 +215,22 @@ class ScreenTimeWidgetUpdateService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         serviceScope.cancel()
+    }
+
+    companion object {
+        private const val TAG = "ScreenTimeWidgetUpdate"
+
+        fun enqueueUpdate(context: android.content.Context, appWidgetId: Int) {
+            val intent = Intent(context, ScreenTimeWidgetUpdateService::class.java).apply {
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            }
+
+            runCatching {
+                context.startService(intent)
+            }.onFailure {
+                Log.w(TAG, "Unable to start screen time widget update service", it)
+            }
+        }
     }
 }
 

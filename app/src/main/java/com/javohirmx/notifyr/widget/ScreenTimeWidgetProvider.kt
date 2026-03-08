@@ -4,8 +4,6 @@ import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
-import android.widget.RemoteViews
-import com.javohirmx.notifyr.R
 
 /**
  * Widget provider for screen time timeline widget
@@ -69,11 +67,7 @@ class ScreenTimeWidgetProvider : AppWidgetProvider() {
             appWidgetManager: AppWidgetManager,
             appWidgetId: Int
         ) {
-            // Start update service to fetch data and update widget
-            val intent = Intent(context, ScreenTimeWidgetUpdateService::class.java).apply {
-                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
-            }
-            context.startService(intent)
+            ScreenTimeWidgetUpdateService.enqueueUpdate(context, appWidgetId)
         }
         
         /**

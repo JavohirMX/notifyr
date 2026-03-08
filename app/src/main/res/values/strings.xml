@@ -7,4 +7,17 @@
     <string name="widget_refresh">Refresh</string>
     <string name="widget_notifications">Notifications</string>
     <string name="widget_screen_time">Screen Time</string>
+    <string name="widget_filter_recent">Recent</string>
+    <string name="widget_filter_urgent">Urgent</string>
+    <string name="widget_filter_normal">Normal</string>
+    <string name="widget_filter_unread">Unread</string>
+    <string name="widget_filter_all">All</string>
+    <string name="widget_no_notifications">No notifications</string>
+    <string name="widget_screen_time_today">Today</string>
+    <string name="widget_screen_time_last_7_days">Last 7 Days</string>
+    <string name="widget_screen_time_zero">0h</string>
+    <string name="widget_time_just_now">Just now</string>
+    <string name="widget_time_minutes_ago">%1$dm ago</string>
+    <string name="widget_time_hours_ago">%1$dh ago</string>
+    <string name="widget_day_duration_format">%1$s: %2$s</string>
 </resources>

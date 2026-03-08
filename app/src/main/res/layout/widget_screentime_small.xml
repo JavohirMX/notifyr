@@ -12,7 +12,7 @@
         android:id="@+id/widget_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Today"
+        android:text="@string/widget_screen_time_today"
         android:textSize="14sp"
         android:textStyle="bold"
         android:textColor="@android:color/black" />
@@ -21,7 +21,7 @@
         android:id="@+id/widget_total_time"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="0h"
+        android:text="@string/widget_screen_time_zero"
         android:textSize="24sp"
         android:textStyle="bold"
         android:textColor="@android:color/black"
@@ -29,12 +29,12 @@
 
     <ImageButton
         android:id="@+id/widget_refresh_button"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:layout_marginTop="4dp"
         android:src="@android:drawable/ic_menu_rotate"
         android:background="?android:attr/selectableItemBackgroundBorderless"
-        android:contentDescription="Refresh" />
+        android:contentDescription="@string/widget_refresh" />
 
 </LinearLayout>
 

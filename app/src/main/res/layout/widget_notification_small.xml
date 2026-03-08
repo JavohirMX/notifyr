@@ -12,7 +12,7 @@
         android:id="@+id/widget_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Recent"
+        android:text="@string/widget_filter_recent"
         android:textSize="14sp"
         android:textStyle="bold"
         android:textColor="@android:color/black" />
@@ -29,12 +29,12 @@
 
     <ImageButton
         android:id="@+id/widget_refresh_button"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:layout_marginTop="4dp"
         android:src="@android:drawable/ic_menu_rotate"
         android:background="?android:attr/selectableItemBackgroundBorderless"
-        android:contentDescription="Refresh" />
+        android:contentDescription="@string/widget_refresh" />
 
 </LinearLayout>
 

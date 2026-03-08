@@ -4,16 +4,16 @@ import android.app.Service
 import android.appwidget.AppWidgetManager
 import android.content.Intent
 import android.os.IBinder
+import android.util.Log
 import android.widget.RemoteViews
-import androidx.core.app.JobIntentService
 import com.javohirmx.notifyr.R
-import com.javohirmx.notifyr.domain.model.NotificationImportance
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
@@ -28,7 +28,7 @@ class NotificationWidgetUpdateService : Service() {
     @Inject
     lateinit var widgetRepository: WidgetRepository
     
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
     override fun onBind(intent: Intent?): IBinder? = null
     
@@ -53,7 +53,9 @@ class NotificationWidgetUpdateService : Service() {
     private suspend fun updateWidget(appWidgetId: Int) {
         val appWidgetManager = AppWidgetManager.getInstance(this)
         val filter = NotificationWidgetProvider.loadWidgetConfig(this, appWidgetId)
-        val notifications = widgetRepository.getFilteredNotifications(filter, limit = 10)
+        val notifications = withContext(Dispatchers.IO) {
+            widgetRepository.getFilteredNotifications(filter, limit = 10)
+        }
         
         // Determine widget size and update accordingly
         val options = appWidgetManager.getAppWidgetOptions(appWidgetId)
@@ -98,13 +100,15 @@ class NotificationWidgetUpdateService : Service() {
         val appIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
-        val appPendingIntent = android.app.PendingIntent.getActivity(
-            this,
-            appWidgetId,
-            appIntent,
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-        )
-        views.setOnClickPendingIntent(R.id.widget_container, appPendingIntent)
+        if (appIntent != null) {
+            val appPendingIntent = android.app.PendingIntent.getActivity(
+                this,
+                appWidgetId,
+                appIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            )
+            views.setOnClickPendingIntent(R.id.widget_container, appPendingIntent)
+        }
         
         appWidgetManager.updateAppWidget(appWidgetId, views)
     }
@@ -116,6 +120,22 @@ class NotificationWidgetUpdateService : Service() {
     
     private fun updateMediumWidget(views: RemoteViews, notifications: List<com.javohirmx.notifyr.domain.model.NotificationData>, filter: WidgetRepository.NotificationFilter) {
         views.setTextViewText(R.id.widget_title, getFilterDisplayName(filter))
+
+        if (notifications.isEmpty()) {
+            views.setTextViewText(R.id.widget_item_1, getString(R.string.widget_no_notifications))
+            views.setViewVisibility(R.id.widget_item_1, android.view.View.VISIBLE)
+            for (i in 1 until 5) {
+                val itemId = when (i) {
+                    1 -> R.id.widget_item_2
+                    2 -> R.id.widget_item_3
+                    3 -> R.id.widget_item_4
+                    4 -> R.id.widget_item_5
+                    else -> null
+                }
+                itemId?.let { views.setViewVisibility(it, android.view.View.GONE) }
+            }
+            return
+        }
         
         // Update first 3-5 items
         val displayCount = minOf(notifications.size, 5)
@@ -152,6 +172,27 @@ class NotificationWidgetUpdateService : Service() {
     
     private fun updateLargeWidget(views: RemoteViews, notifications: List<com.javohirmx.notifyr.domain.model.NotificationData>, filter: WidgetRepository.NotificationFilter) {
         views.setTextViewText(R.id.widget_title, getFilterDisplayName(filter))
+
+        if (notifications.isEmpty()) {
+            views.setTextViewText(R.id.widget_item_1, getString(R.string.widget_no_notifications))
+            views.setViewVisibility(R.id.widget_item_1, android.view.View.VISIBLE)
+            for (i in 1 until 10) {
+                val itemId = when (i) {
+                    1 -> R.id.widget_item_2
+                    2 -> R.id.widget_item_3
+                    3 -> R.id.widget_item_4
+                    4 -> R.id.widget_item_5
+                    5 -> R.id.widget_item_6
+                    6 -> R.id.widget_item_7
+                    7 -> R.id.widget_item_8
+                    8 -> R.id.widget_item_9
+                    9 -> R.id.widget_item_10
+                    else -> null
+                }
+                itemId?.let { views.setViewVisibility(it, android.view.View.GONE) }
+            }
+            return
+        }
         
         // Update first 10 items
         val displayCount = minOf(notifications.size, 10)
@@ -206,9 +247,9 @@ class NotificationWidgetUpdateService : Service() {
         val diff = now - timestamp
         
         return when {
-            diff < 60000 -> "Just now"
-            diff < 3600000 -> "${diff / 60000}m ago"
-            diff < 86400000 -> "${diff / 3600000}h ago"
+            diff < 60000 -> getString(R.string.widget_time_just_now)
+            diff < 3600000 -> getString(R.string.widget_time_minutes_ago, diff / 60000)
+            diff < 86400000 -> getString(R.string.widget_time_hours_ago, diff / 3600000)
             else -> {
                 val sdf = SimpleDateFormat("MMM dd", Locale.getDefault())
                 sdf.format(Date(timestamp))
@@ -218,17 +259,33 @@ class NotificationWidgetUpdateService : Service() {
     
     private fun getFilterDisplayName(filter: WidgetRepository.NotificationFilter): String {
         return when (filter) {
-            WidgetRepository.NotificationFilter.RECENT -> "Recent"
-            WidgetRepository.NotificationFilter.URGENT -> "Urgent"
-            WidgetRepository.NotificationFilter.NORMAL -> "Normal"
-            WidgetRepository.NotificationFilter.UNREAD -> "Unread"
-            WidgetRepository.NotificationFilter.ALL -> "All"
+            WidgetRepository.NotificationFilter.RECENT -> getString(R.string.widget_filter_recent)
+            WidgetRepository.NotificationFilter.URGENT -> getString(R.string.widget_filter_urgent)
+            WidgetRepository.NotificationFilter.NORMAL -> getString(R.string.widget_filter_normal)
+            WidgetRepository.NotificationFilter.UNREAD -> getString(R.string.widget_filter_unread)
+            WidgetRepository.NotificationFilter.ALL -> getString(R.string.widget_filter_all)
         }
     }
     
     override fun onDestroy() {
         super.onDestroy()
         serviceScope.cancel()
+    }
+
+    companion object {
+        private const val TAG = "NotificationWidgetUpdate"
+
+        fun enqueueUpdate(context: android.content.Context, appWidgetId: Int) {
+            val intent = Intent(context, NotificationWidgetUpdateService::class.java).apply {
+                putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
+            }
+
+            runCatching {
+                context.startService(intent)
+            }.onFailure {
+                Log.w(TAG, "Unable to start notification widget update service", it)
+            }
+        }
     }
 }
 

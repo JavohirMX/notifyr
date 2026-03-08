@@ -18,18 +18,18 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Recent"
+            android:text="@string/widget_filter_recent"
             android:textSize="16sp"
             android:textStyle="bold"
             android:textColor="@android:color/black" />
 
         <ImageButton
             android:id="@+id/widget_refresh_button"
-            android:layout_width="32dp"
-            android:layout_height="32dp"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
             android:src="@android:drawable/ic_menu_rotate"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Refresh" />
+            android:contentDescription="@string/widget_refresh" />
 
     </LinearLayout>
 
