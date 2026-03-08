@@ -9,7 +9,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -75,8 +77,57 @@ fun HistoryScreen(
     var showFilterSheet by remember { mutableStateOf(false) }
     var showAppRuleDialog by remember { mutableStateOf(false) }
     var selectedAppForRule by remember { mutableStateOf<Pair<String, String>?>(null) } // packageName, appName
+    val pagerState = rememberPagerState(pageCount = { 3 })
+    val scope = rememberCoroutineScope()
+    val urgentListState = rememberLazyListState()
+    val normalListState = rememberLazyListState()
+    val ignoredListState = rememberLazyListState()
+
+    val currentListState = when (pagerState.currentPage) {
+        0 -> urgentListState
+        1 -> normalListState
+        else -> ignoredListState
+    }
+    val currentNotifications = when (pagerState.currentPage) {
+        0 -> uiState.urgentNotifications
+        1 -> uiState.normalNotifications
+        else -> uiState.ignoredNotifications
+    }
+
+    val showScrollToTopButton by remember(currentListState, uiState.isLoading, currentNotifications.size) {
+        derivedStateOf {
+            !uiState.isLoading &&
+                currentNotifications.isNotEmpty() &&
+                shouldShowScrollToTopButton(
+                    firstVisibleItemIndex = currentListState.firstVisibleItemIndex,
+                    firstVisibleItemScrollOffset = currentListState.firstVisibleItemScrollOffset,
+                    indexThreshold = 3,
+                    offsetThresholdPx = 200
+                )
+        }
+    }
     
     Scaffold(
+        floatingActionButton = {
+            AnimatedVisibility(
+                visible = showScrollToTopButton,
+                enter = scaleIn() + fadeIn(),
+                exit = scaleOut() + fadeOut()
+            ) {
+                SmallFloatingActionButton(
+                    onClick = {
+                        scope.launch {
+                            currentListState.animateScrollToItem(0)
+                        }
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowUp,
+                        contentDescription = "Scroll to top"
+                    )
+                }
+            }
+        },
         topBar = {
             Column {
                 // Enhanced Search Bar
@@ -109,8 +160,6 @@ fun HistoryScreen(
                 .padding(paddingValues)
         ) {
             // Enhanced Tab Layout with Pager
-            val pagerState = rememberPagerState(pageCount = { 3 })
-            val scope = rememberCoroutineScope()
             
             // Restore last selected tab on first load
             LaunchedEffect(Unit) {
@@ -207,6 +256,7 @@ fun HistoryScreen(
                 when (page) {
                     0 -> NotificationList(
                         notifications = uiState.urgentNotifications,
+                        listState = urgentListState,
                         importance = NotificationImportance.URGENT,
                         onMarkAsRead = viewModel::markAsRead,
                         onDelete = viewModel::deleteNotification,
@@ -223,6 +273,7 @@ fun HistoryScreen(
                     )
                     1 -> NotificationList(
                         notifications = uiState.normalNotifications,
+                        listState = normalListState,
                         importance = NotificationImportance.NORMAL,
                         onMarkAsRead = viewModel::markAsRead,
                         onDelete = viewModel::deleteNotification,
@@ -239,6 +290,7 @@ fun HistoryScreen(
                     )
                     2 -> NotificationList(
                         notifications = uiState.ignoredNotifications,
+                        listState = ignoredListState,
                         importance = NotificationImportance.IGNORE,
                         onMarkAsRead = viewModel::markAsRead,
                         onDelete = viewModel::deleteNotification,
@@ -372,6 +424,7 @@ private fun DateGroupHeader(dateGroup: DateGroup) {
 @Composable
 fun NotificationList(
     notifications: List<NotificationItem>,
+    listState: LazyListState,
     importance: NotificationImportance,
     onMarkAsRead: (NotificationData) -> Unit,
     onDelete: (NotificationData) -> Unit,
@@ -487,6 +540,7 @@ fun NotificationList(
                 }
                 
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
