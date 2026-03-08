@@ -32,24 +32,44 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var appLockRepository: AppLockRepository
 
+    private val launchRouteState = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        launchRouteState.value = resolveOpenRoute(intent)
         setContent {
             NotifyrTheme {
-                NotifyrApp()
+                NotifyrApp(initialOpenRoute = launchRouteState.value)
             }
         }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        launchRouteState.value = resolveOpenRoute(intent)
     }
 
     override fun onStart() {
         super.onStart()
         appLockRepository.onAppForegrounded()
     }
+
+    private fun resolveOpenRoute(intent: android.content.Intent?): String? {
+        val openTab = intent?.getStringExtra("open_tab") ?: return null
+        return when (openTab) {
+            Screen.Dashboard.route -> Screen.Dashboard.route
+            Screen.History.route -> Screen.History.route
+            Screen.Settings.route -> Screen.Settings.route
+            Screen.ScreenTime.route -> Screen.ScreenTime.route
+            Screen.Insights.route -> Screen.Insights.route
+            else -> null
+        }
+    }
 }
 
 @Composable
-fun NotifyrApp() {
+fun NotifyrApp(initialOpenRoute: String? = null) {
     val appLockViewModel: AppLockViewModel = androidx.hilt.navigation.compose.hiltViewModel()
     val appLockState by appLockViewModel.uiState.collectAsStateWithLifecycle()
     val navController = rememberNavController()
@@ -69,10 +89,25 @@ fun NotifyrApp() {
         isOnboardingCompleted = initialOnboardingStatus
         
         startDestination = if (initialOnboardingStatus) {
-            // Restore last opened route, or default to Dashboard
-            sharedPreferences.getString("last_route", Screen.Dashboard.route) ?: Screen.Dashboard.route
+            initialOpenRoute
+                ?: sharedPreferences.getString("last_route", Screen.Dashboard.route)
+                ?: Screen.Dashboard.route
         } else {
             Screen.Onboarding.route
+        }
+    }
+
+    LaunchedEffect(initialOpenRoute, isOnboardingCompleted, currentRoute) {
+        if (!isOnboardingCompleted || initialOpenRoute == null) {
+            return@LaunchedEffect
+        }
+
+        if (currentRoute != initialOpenRoute) {
+            navController.navigate(initialOpenRoute) {
+                popUpTo(navController.graph.startDestinationId) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
         }
     }
     

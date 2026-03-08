@@ -23,6 +23,18 @@ interface NotificationDao {
     
     @Query("SELECT * FROM notifications WHERE timestamp >= :startTime AND timestamp <= :endTime ORDER BY timestamp DESC")
     fun getNotificationsByDateRange(startTime: Long, endTime: Long): Flow<List<NotificationEntity>>
+
+    @Query("SELECT * FROM notifications WHERE timestamp >= :since ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getRecentNotificationsSince(since: Long, limit: Int): List<NotificationEntity>
+
+    @Query("SELECT * FROM notifications WHERE importance = :importance ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getNotificationsByImportanceLimited(importance: Int, limit: Int): List<NotificationEntity>
+
+    @Query("SELECT * FROM notifications WHERE isRead = 0 ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getUnreadNotificationsLimited(limit: Int): List<NotificationEntity>
+
+    @Query("SELECT * FROM notifications ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getAllNotificationsLimited(limit: Int): List<NotificationEntity>
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertNotification(notification: NotificationEntity): Long

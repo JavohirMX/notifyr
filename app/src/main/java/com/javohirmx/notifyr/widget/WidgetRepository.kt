@@ -5,7 +5,6 @@ import com.javohirmx.notifyr.data.repository.ScreenTimeRepository
 import com.javohirmx.notifyr.domain.model.DailyScreenTime
 import com.javohirmx.notifyr.domain.model.NotificationData
 import com.javohirmx.notifyr.domain.model.NotificationImportance
-import kotlinx.coroutines.flow.first
 import java.util.Calendar
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -35,31 +34,31 @@ class WidgetRepository @Inject constructor(
      * Get filtered notifications based on filter type
      */
     suspend fun getFilteredNotifications(filter: NotificationFilter, limit: Int = 10): List<NotificationData> {
-        val allNotifications = notificationRepository.getAllNotifications().first()
-        
-        val filtered = when (filter) {
+        return when (filter) {
             NotificationFilter.RECENT -> {
                 val now = System.currentTimeMillis()
-                val yesterday = now - (24 * 60 * 60 * 1000) // 24 hours ago
-                allNotifications.filter { it.timestamp >= yesterday }
+                val yesterday = now - (24 * 60 * 60 * 1000)
+                notificationRepository.getRecentNotificationsSince(yesterday, limit)
             }
             NotificationFilter.URGENT -> {
-                allNotifications.filter { it.importance == NotificationImportance.URGENT }
+                notificationRepository.getNotificationsByImportanceLimited(
+                    NotificationImportance.URGENT,
+                    limit
+                )
             }
             NotificationFilter.NORMAL -> {
-                allNotifications.filter { it.importance == NotificationImportance.NORMAL }
+                notificationRepository.getNotificationsByImportanceLimited(
+                    NotificationImportance.NORMAL,
+                    limit
+                )
             }
             NotificationFilter.UNREAD -> {
-                allNotifications.filter { !it.isRead }
+                notificationRepository.getUnreadNotificationsLimited(limit)
             }
             NotificationFilter.ALL -> {
-                allNotifications
+                notificationRepository.getAllNotificationsLimited(limit)
             }
         }
-        
-        return filtered
-            .sortedByDescending { it.timestamp }
-            .take(limit)
     }
     
     /**

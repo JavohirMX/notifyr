@@ -50,6 +50,26 @@ class NotificationRepository @Inject constructor(
             entities.map { it.toDomain() }
         }
     }
+
+    suspend fun getRecentNotificationsSince(since: Long, limit: Int): List<NotificationData> {
+        return notificationDao.getRecentNotificationsSince(since, limit).map { it.toDomain() }
+    }
+
+    suspend fun getNotificationsByImportanceLimited(
+        importance: NotificationImportance,
+        limit: Int
+    ): List<NotificationData> {
+        return notificationDao.getNotificationsByImportanceLimited(importance.value, limit)
+            .map { it.toDomain() }
+    }
+
+    suspend fun getUnreadNotificationsLimited(limit: Int): List<NotificationData> {
+        return notificationDao.getUnreadNotificationsLimited(limit).map { it.toDomain() }
+    }
+
+    suspend fun getAllNotificationsLimited(limit: Int): List<NotificationData> {
+        return notificationDao.getAllNotificationsLimited(limit).map { it.toDomain() }
+    }
     
     suspend fun insertNotification(notification: NotificationData): Long {
         return notificationDao.insertNotification(notification.toEntity())

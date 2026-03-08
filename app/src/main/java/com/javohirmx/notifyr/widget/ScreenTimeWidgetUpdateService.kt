@@ -1,11 +1,13 @@
 package com.javohirmx.notifyr.widget
 
 import android.app.Service
+import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.Intent
 import android.os.IBinder
 import android.util.Log
 import android.widget.RemoteViews
+import com.javohirmx.notifyr.MainActivity
 import com.javohirmx.notifyr.R
 import com.javohirmx.notifyr.domain.model.formatDuration
 import dagger.hilt.android.AndroidEntryPoint
@@ -53,64 +55,119 @@ class ScreenTimeWidgetUpdateService : Service() {
     
     private suspend fun updateWidget(appWidgetId: Int) {
         val appWidgetManager = AppWidgetManager.getInstance(this)
-        val dailyData = withContext(Dispatchers.IO) {
-            widgetRepository.getLast7DaysScreenTime()
-        }
-        
-        // Determine widget size and update accordingly
         val options = appWidgetManager.getAppWidgetOptions(appWidgetId)
         val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH)
-        val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT)
-        
+
         val layoutId = when {
             minWidth < 110 -> R.layout.widget_screentime_small
             minWidth < 250 -> R.layout.widget_screentime_medium
             else -> R.layout.widget_screentime_large
         }
-        
-        val views = RemoteViews(packageName, layoutId)
-        
-        // Update widget content based on size
-        when (layoutId) {
-            R.layout.widget_screentime_small -> {
-                updateSmallWidget(views, dailyData)
+
+        val loadingViews = RemoteViews(packageName, layoutId)
+        renderLoadingState(loadingViews, layoutId)
+        applyCommonIntents(loadingViews, appWidgetId)
+        appWidgetManager.updateAppWidget(appWidgetId, loadingViews)
+
+        runCatching {
+            val dailyData = withContext(Dispatchers.IO) {
+                widgetRepository.getLast7DaysScreenTime()
             }
-            R.layout.widget_screentime_medium -> {
-                updateMediumWidget(views, dailyData)
+
+            val views = RemoteViews(packageName, layoutId)
+
+            when (layoutId) {
+                R.layout.widget_screentime_small -> {
+                    updateSmallWidget(views, dailyData)
+                }
+                R.layout.widget_screentime_medium -> {
+                    updateMediumWidget(views, dailyData)
+                }
+                R.layout.widget_screentime_large -> {
+                    updateLargeWidget(views, dailyData)
+                }
             }
-            R.layout.widget_screentime_large -> {
-                updateLargeWidget(views, dailyData)
-            }
+
+            applyCommonIntents(views, appWidgetId)
+            appWidgetManager.updateAppWidget(appWidgetId, views)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to render screen time widget", error)
+            val errorViews = RemoteViews(packageName, layoutId)
+            renderErrorState(errorViews, layoutId)
+            applyCommonIntents(errorViews, appWidgetId)
+            appWidgetManager.updateAppWidget(appWidgetId, errorViews)
         }
-        
-        // Set refresh button click
+    }
+
+    private fun applyCommonIntents(views: RemoteViews, appWidgetId: Int) {
         val refreshIntent = Intent(this, ScreenTimeWidgetProvider::class.java).apply {
             action = ScreenTimeWidgetProvider.ACTION_REFRESH
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
         }
-        val refreshPendingIntent = android.app.PendingIntent.getBroadcast(
+        val refreshPendingIntent = PendingIntent.getBroadcast(
             this,
             appWidgetId,
             refreshIntent,
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         views.setOnClickPendingIntent(R.id.widget_refresh_button, refreshPendingIntent)
-        
-        // Set click to open app
-        val appIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+
+        val openScreenTimeIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("open_tab", "screen_time")
         }
-        if (appIntent != null) {
-            val appPendingIntent = android.app.PendingIntent.getActivity(
-                this,
-                appWidgetId,
-                appIntent,
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-            )
-            views.setOnClickPendingIntent(R.id.widget_container, appPendingIntent)
+        val openScreenTimePendingIntent = PendingIntent.getActivity(
+            this,
+            appWidgetId + 20_000,
+            openScreenTimeIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.widget_container, openScreenTimePendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_title, openScreenTimePendingIntent)
+
+        listOf(
+            R.id.widget_day_1,
+            R.id.widget_day_2,
+            R.id.widget_day_3,
+            R.id.widget_day_4,
+            R.id.widget_day_5,
+            R.id.widget_day_6,
+            R.id.widget_day_7
+        ).forEach { itemId ->
+            runCatching {
+                views.setOnClickPendingIntent(itemId, openScreenTimePendingIntent)
+            }
         }
-        
-        appWidgetManager.updateAppWidget(appWidgetId, views)
+    }
+
+    private fun renderLoadingState(views: RemoteViews, layoutId: Int) {
+        when (layoutId) {
+            R.layout.widget_screentime_small -> {
+                views.setTextViewText(R.id.widget_title, getString(R.string.widget_screen_time_today))
+                views.setTextViewText(R.id.widget_total_time, getString(R.string.widget_loading))
+            }
+            R.layout.widget_screentime_medium,
+            R.layout.widget_screentime_large -> {
+                views.setTextViewText(R.id.widget_title, getString(R.string.widget_screen_time_last_7_days))
+                views.setTextViewText(R.id.widget_day_1, getString(R.string.widget_loading))
+                views.setViewVisibility(R.id.widget_day_1, android.view.View.VISIBLE)
+            }
+        }
+    }
+
+    private fun renderErrorState(views: RemoteViews, layoutId: Int) {
+        when (layoutId) {
+            R.layout.widget_screentime_small -> {
+                views.setTextViewText(R.id.widget_title, getString(R.string.widget_screen_time))
+                views.setTextViewText(R.id.widget_total_time, getString(R.string.widget_error_short))
+            }
+            R.layout.widget_screentime_medium,
+            R.layout.widget_screentime_large -> {
+                views.setTextViewText(R.id.widget_title, getString(R.string.widget_screen_time_last_7_days))
+                views.setTextViewText(R.id.widget_day_1, getString(R.string.widget_error))
+                views.setViewVisibility(R.id.widget_day_1, android.view.View.VISIBLE)
+            }
+        }
     }
     
     private fun updateSmallWidget(views: RemoteViews, dailyData: List<com.javohirmx.notifyr.domain.model.DailyScreenTime>) {

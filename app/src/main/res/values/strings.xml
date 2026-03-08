@@ -20,4 +20,7 @@
     <string name="widget_time_minutes_ago">%1$dm ago</string>
     <string name="widget_time_hours_ago">%1$dh ago</string>
     <string name="widget_day_duration_format">%1$s: %2$s</string>
+    <string name="widget_loading">Loading…</string>
+    <string name="widget_error">Unable to update widget</string>
+    <string name="widget_error_short">Error</string>
 </resources>

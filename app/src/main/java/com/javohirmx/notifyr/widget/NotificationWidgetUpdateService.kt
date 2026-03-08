@@ -1,11 +1,13 @@
 package com.javohirmx.notifyr.widget
 
 import android.app.Service
+import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.Intent
 import android.os.IBinder
 import android.util.Log
 import android.widget.RemoteViews
+import com.javohirmx.notifyr.MainActivity
 import com.javohirmx.notifyr.R
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -53,64 +55,129 @@ class NotificationWidgetUpdateService : Service() {
     private suspend fun updateWidget(appWidgetId: Int) {
         val appWidgetManager = AppWidgetManager.getInstance(this)
         val filter = NotificationWidgetProvider.loadWidgetConfig(this, appWidgetId)
-        val notifications = withContext(Dispatchers.IO) {
-            widgetRepository.getFilteredNotifications(filter, limit = 10)
-        }
-        
-        // Determine widget size and update accordingly
+
         val options = appWidgetManager.getAppWidgetOptions(appWidgetId)
         val minWidth = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH)
-        val minHeight = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT)
-        
+
         val layoutId = when {
             minWidth < 110 -> R.layout.widget_notification_small
             minWidth < 250 -> R.layout.widget_notification_medium
             else -> R.layout.widget_notification_large
         }
-        
-        val views = RemoteViews(packageName, layoutId)
-        
-        // Update widget content based on size
-        when (layoutId) {
-            R.layout.widget_notification_small -> {
-                updateSmallWidget(views, notifications, filter)
+
+        val loadingViews = RemoteViews(packageName, layoutId)
+        renderLoadingState(loadingViews, layoutId, filter)
+        applyCommonIntents(loadingViews, appWidgetId)
+        appWidgetManager.updateAppWidget(appWidgetId, loadingViews)
+
+        runCatching {
+            val notifications = withContext(Dispatchers.IO) {
+                widgetRepository.getFilteredNotifications(filter, limit = 10)
             }
-            R.layout.widget_notification_medium -> {
-                updateMediumWidget(views, notifications, filter)
+
+            val views = RemoteViews(packageName, layoutId)
+
+            when (layoutId) {
+                R.layout.widget_notification_small -> {
+                    updateSmallWidget(views, notifications, filter)
+                }
+                R.layout.widget_notification_medium -> {
+                    updateMediumWidget(views, notifications, filter)
+                }
+                R.layout.widget_notification_large -> {
+                    updateLargeWidget(views, notifications, filter)
+                }
             }
-            R.layout.widget_notification_large -> {
-                updateLargeWidget(views, notifications, filter)
-            }
+
+            applyCommonIntents(views, appWidgetId)
+            appWidgetManager.updateAppWidget(appWidgetId, views)
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to render notification widget", error)
+            val errorViews = RemoteViews(packageName, layoutId)
+            renderErrorState(errorViews, layoutId, filter)
+            applyCommonIntents(errorViews, appWidgetId)
+            appWidgetManager.updateAppWidget(appWidgetId, errorViews)
         }
-        
-        // Set refresh button click
+    }
+
+    private fun applyCommonIntents(views: RemoteViews, appWidgetId: Int) {
         val refreshIntent = Intent(this, NotificationWidgetProvider::class.java).apply {
             action = NotificationWidgetProvider.ACTION_REFRESH
             putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, appWidgetId)
         }
-        val refreshPendingIntent = android.app.PendingIntent.getBroadcast(
+        val refreshPendingIntent = PendingIntent.getBroadcast(
             this,
             appWidgetId,
             refreshIntent,
-            android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         views.setOnClickPendingIntent(R.id.widget_refresh_button, refreshPendingIntent)
-        
-        // Set click to open app
-        val appIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+
+        val openHistoryIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("open_tab", "history")
         }
-        if (appIntent != null) {
-            val appPendingIntent = android.app.PendingIntent.getActivity(
-                this,
-                appWidgetId,
-                appIntent,
-                android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
-            )
-            views.setOnClickPendingIntent(R.id.widget_container, appPendingIntent)
+        val openHistoryPendingIntent = PendingIntent.getActivity(
+            this,
+            appWidgetId + 10_000,
+            openHistoryIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        views.setOnClickPendingIntent(R.id.widget_container, openHistoryPendingIntent)
+        views.setOnClickPendingIntent(R.id.widget_title, openHistoryPendingIntent)
+
+        listOf(
+            R.id.widget_item_1,
+            R.id.widget_item_2,
+            R.id.widget_item_3,
+            R.id.widget_item_4,
+            R.id.widget_item_5,
+            R.id.widget_item_6,
+            R.id.widget_item_7,
+            R.id.widget_item_8,
+            R.id.widget_item_9,
+            R.id.widget_item_10
+        ).forEach { itemId ->
+            runCatching {
+                views.setOnClickPendingIntent(itemId, openHistoryPendingIntent)
+            }
         }
-        
-        appWidgetManager.updateAppWidget(appWidgetId, views)
+    }
+
+    private fun renderLoadingState(
+        views: RemoteViews,
+        layoutId: Int,
+        filter: WidgetRepository.NotificationFilter
+    ) {
+        views.setTextViewText(R.id.widget_title, getFilterDisplayName(filter))
+        when (layoutId) {
+            R.layout.widget_notification_small -> {
+                views.setTextViewText(R.id.widget_count, getString(R.string.widget_loading))
+            }
+            R.layout.widget_notification_medium,
+            R.layout.widget_notification_large -> {
+                views.setTextViewText(R.id.widget_item_1, getString(R.string.widget_loading))
+                views.setViewVisibility(R.id.widget_item_1, android.view.View.VISIBLE)
+            }
+        }
+    }
+
+    private fun renderErrorState(
+        views: RemoteViews,
+        layoutId: Int,
+        filter: WidgetRepository.NotificationFilter
+    ) {
+        views.setTextViewText(R.id.widget_title, getFilterDisplayName(filter))
+        when (layoutId) {
+            R.layout.widget_notification_small -> {
+                views.setTextViewText(R.id.widget_count, getString(R.string.widget_error_short))
+            }
+            R.layout.widget_notification_medium,
+            R.layout.widget_notification_large -> {
+                views.setTextViewText(R.id.widget_item_1, getString(R.string.widget_error))
+                views.setViewVisibility(R.id.widget_item_1, android.view.View.VISIBLE)
+            }
+        }
     }
     
     private fun updateSmallWidget(views: RemoteViews, notifications: List<com.javohirmx.notifyr.domain.model.NotificationData>, filter: WidgetRepository.NotificationFilter) {
