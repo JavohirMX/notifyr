@@ -7,11 +7,14 @@ import android.util.Log
 import com.javohirmx.notifyr.data.repository.NotificationRepository
 import com.javohirmx.notifyr.domain.digest.SmartDigestScheduler
 import com.javohirmx.notifyr.domain.focus.FocusModeManager
+import com.javohirmx.notifyr.domain.model.AppRule
+import com.javohirmx.notifyr.domain.model.AppRuleType
 import com.javohirmx.notifyr.domain.model.NotificationData
 import com.javohirmx.notifyr.domain.model.NotificationImportance
 import com.javohirmx.notifyr.domain.model.shouldShowImmediately
 import com.javohirmx.notifyr.domain.rules.EnhancedNotificationRulesEngine
 import com.javohirmx.notifyr.domain.rules.NotificationRulesEngine
+import com.javohirmx.notifyr.domain.rules.SyncStatusNotificationDetector
 import com.javohirmx.notifyr.widget.WidgetUpdateHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +51,9 @@ class NotificationListenerService : NotificationListenerService() {
     
     @Inject
     lateinit var digestScheduler: SmartDigestScheduler
+
+    @Inject
+    lateinit var syncStatusNotificationDetector: SyncStatusNotificationDetector
     
     // For preventing race conditions
     private val processingKeys = mutableSetOf<String>()
@@ -160,6 +166,11 @@ class NotificationListenerService : NotificationListenerService() {
                 importance = NotificationImportance.NORMAL, // Don't classify importance
                 timestamp = sbn.postTime
             )
+
+            if (shouldDropSyncStatusNotification(baseNotificationData, appRule)) {
+                Log.d(TAG, "Dropped sync/status heartbeat (DONT_INTERCEPT mode): $appName - $title")
+                return
+            }
             
             // Extract conversationId and sender even in DONT_INTERCEPT mode for proper deduplication
             // Use enhancedRulesEngine to extract these fields without full classification
@@ -206,6 +217,11 @@ class NotificationListenerService : NotificationListenerService() {
             importance = NotificationImportance.NORMAL, // Will be classified by rules engine
             timestamp = timestamp
         )
+
+        if (shouldDropSyncStatusNotification(notificationData, appRule)) {
+            Log.d(TAG, "Dropped sync/status heartbeat: $appName - $title")
+            return
+        }
         
         // Use HYBRID ML+Rules classifier for smart classification
         val enhancedNotification = hybridClassifier.classify(notificationData)
@@ -373,5 +389,17 @@ class NotificationListenerService : NotificationListenerService() {
             Log.w(TAG, "Could not determine system status for $packageName", e)
             true
         }
+    }
+
+    private fun shouldDropSyncStatusNotification(notification: NotificationData, appRule: AppRule?): Boolean {
+        if (appRule != null && appRule.isEnabled) {
+            when (appRule.ruleType) {
+                AppRuleType.ALWAYS_DROP_SYNC_STATUS -> return true
+                AppRuleType.NEVER_DROP_SYNC_STATUS -> return false
+                else -> Unit
+            }
+        }
+
+        return syncStatusNotificationDetector.isSyncStatusNotification(notification)
     }
 }

@@ -120,6 +120,8 @@ class NotificationRulesEngine @Inject constructor(
                 AppRuleType.ALWAYS_URGENT -> NotificationImportance.URGENT
                 AppRuleType.ALWAYS_IGNORE -> NotificationImportance.IGNORE
                 AppRuleType.FILTER_KEYWORDS -> null // Continue to keyword evaluation
+                AppRuleType.ALWAYS_DROP_SYNC_STATUS -> null // Used by service-level sync-status filter
+                AppRuleType.NEVER_DROP_SYNC_STATUS -> null // Used by service-level sync-status filter
             }
         }
         

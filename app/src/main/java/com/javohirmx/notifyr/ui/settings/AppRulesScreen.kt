@@ -310,6 +310,8 @@ fun AppRuleCard(
                                             AppRuleType.ALWAYS_URGENT -> Icons.Default.Warning
                                             AppRuleType.FILTER_KEYWORDS -> Icons.Default.Settings
                                             AppRuleType.ALWAYS_IGNORE -> Icons.Default.Close
+                                            AppRuleType.ALWAYS_DROP_SYNC_STATUS -> Icons.Default.SyncDisabled
+                                            AppRuleType.NEVER_DROP_SYNC_STATUS -> Icons.Default.Sync
                                         },
                                         contentDescription = null,
                                         modifier = Modifier.size(14.dp)
@@ -321,6 +323,8 @@ fun AppRuleCard(
                                         AppRuleType.ALWAYS_URGENT -> MaterialTheme.colorScheme.errorContainer
                                         AppRuleType.FILTER_KEYWORDS -> MaterialTheme.colorScheme.tertiaryContainer
                                         AppRuleType.ALWAYS_IGNORE -> MaterialTheme.colorScheme.surfaceVariant
+                                        AppRuleType.ALWAYS_DROP_SYNC_STATUS -> MaterialTheme.colorScheme.secondaryContainer
+                                        AppRuleType.NEVER_DROP_SYNC_STATUS -> MaterialTheme.colorScheme.primaryContainer
                                     }
                                 ),
                                 modifier = Modifier.height(24.dp)
@@ -557,6 +561,8 @@ fun RuleOptionCard(
                             AppRuleType.ALWAYS_URGENT -> Icons.Default.Warning
                             AppRuleType.FILTER_KEYWORDS -> Icons.Default.Settings
                             AppRuleType.ALWAYS_IGNORE -> Icons.Default.Close
+                            AppRuleType.ALWAYS_DROP_SYNC_STATUS -> Icons.Default.SyncDisabled
+                            AppRuleType.NEVER_DROP_SYNC_STATUS -> Icons.Default.Sync
                         },
                         contentDescription = null,
                         modifier = Modifier.size(20.dp),

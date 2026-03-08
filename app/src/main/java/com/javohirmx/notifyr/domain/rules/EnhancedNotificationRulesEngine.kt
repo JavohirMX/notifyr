@@ -201,6 +201,8 @@ class EnhancedNotificationRulesEngine @Inject constructor(
                 AppRuleType.ALWAYS_URGENT -> Priority.IMPORTANT
                 AppRuleType.ALWAYS_IGNORE -> Priority.LOW
                 AppRuleType.FILTER_KEYWORDS -> Priority.NORMAL
+                AppRuleType.ALWAYS_DROP_SYNC_STATUS -> Priority.LOW
+                AppRuleType.NEVER_DROP_SYNC_STATUS -> Priority.NORMAL
             }
         }
         
