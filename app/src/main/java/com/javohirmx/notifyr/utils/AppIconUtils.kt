@@ -32,6 +32,32 @@ object AppIconUtils {
     }
     
     private val cacheLock = ReentrantReadWriteLock()
+
+    /**
+     * Process-level cache of resolved app drawables, keyed by package name.
+     *
+     * `PackageManager.getApplicationIcon` is a binder round-trip. Doing it during composition
+     * meant every recomposition of every visible row paid for it, so it is resolved once here
+     * and invalidated by [removeFromCache] (driven by `PackageUpdateReceiver`).
+     */
+    private val drawableCache = java.util.concurrent.ConcurrentHashMap<String, Any>()
+
+    /** Sentinel for "this package has no icon", so misses are not retried on every recomposition. */
+    private object UnresolvableDrawable
+
+    private fun loadAppDrawable(context: Context, packageName: String): android.graphics.drawable.Drawable? {
+        val cached = drawableCache[packageName]
+        if (cached != null) {
+            return if (cached === UnresolvableDrawable) null else cached as android.graphics.drawable.Drawable
+        }
+        val resolved = try {
+            context.packageManager.getApplicationIcon(packageName)
+        } catch (e: Exception) {
+            null
+        }
+        drawableCache[packageName] = resolved ?: UnresolvableDrawable
+        return resolved
+    }
     
     /**
      * Get app icon as Bitmap for use in notifications (non-Composable)
@@ -160,6 +186,7 @@ object AppIconUtils {
         cacheLock.write {
             iconCache.evictAll()
         }
+        drawableCache.clear()
     }
     
     /**
@@ -170,6 +197,7 @@ object AppIconUtils {
             val keysToRemove = iconCache.snapshot().keys.filter { it.startsWith("${packageName}_") }
             keysToRemove.forEach { iconCache.remove(it) }
         }
+        drawableCache.remove(packageName)
     }
     
     /**
@@ -230,98 +258,50 @@ object AppIconUtils {
     }
     @Composable
     fun rememberAppIconPainter(context: Context, packageName: String, sizeDp: Dp = 24.dp): Painter? {
-        val packageManager = context.packageManager
-        // Convert Dp to pixels with proper density scaling for crisp icons
         val density = androidx.compose.ui.platform.LocalDensity.current
         val sizePx = with(density) { (sizeDp * 2f).roundToPx() } // 2x for high quality
-        
-        // Get package version code to include in remember key - this ensures recomputation when app is updated
-        val packageVersion = try {
-            packageManager.getPackageInfo(packageName, 0)?.longVersionCode ?: 0L
-        } catch (e: Exception) {
-            0L // If package not found, use 0
-        }
-        
-        return remember(packageName, sizePx, packageVersion) {
-            // Validate package name first
+
+        // Recomposition is now a map lookup. Previously this called getPackageInfo() outside
+        // the remember block, so every recomposition of every visible row issued a binder call,
+        // and its retry path could Thread.sleep() on the main thread.
+        return remember(packageName, sizePx) {
             if (packageName.isBlank()) {
                 android.util.Log.w("AppIconUtils", "Blank package name provided")
-                return@remember null
+                null
+            } else {
+                loadIconPainterOrNull(context, packageName, sizePx)
             }
-            
-            // Check cache first (for Composable version)
-            val cacheKey = "${packageName}_${sizePx}"
-            cacheLock.read {
-                iconCache.get(cacheKey)?.let { cachedBitmap ->
-                    return@remember BitmapPainter(cachedBitmap.asImageBitmap())
-                }
-            }
-            
-            // Try to load icon with retry logic
-            var lastException: Exception? = null
-            repeat(2) { attempt ->
-                try {
-                    // Validate package exists before trying to load
-                    try {
-                        packageManager.getPackageInfo(packageName, 0)
-                    } catch (e: PackageManager.NameNotFoundException) {
-                        // Package doesn't exist, remove from cache if present
-                        removeFromCache(packageName)
-                        android.util.Log.d("AppIconUtils", "Package not found: $packageName")
-                        return@remember null
-                    }
-                    
-                    // Try to get the actual app icon
-                    val drawable = packageManager.getApplicationIcon(packageName)
-                    val bitmap = drawable.toBitmap(width = sizePx, height = sizePx, config = android.graphics.Bitmap.Config.ARGB_8888)
-                    
-                    // Cache the successful result
-                    cacheLock.write {
-                        iconCache.put(cacheKey, bitmap)
-                    }
-                    
-                    return@remember BitmapPainter(bitmap.asImageBitmap())
-                } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
-                    lastException = e
-                    // Package not found, remove from cache
-                    removeFromCache(packageName)
-                    android.util.Log.d("AppIconUtils", "App not found: $packageName (attempt ${attempt + 1})")
-                    // Don't retry for NameNotFoundException
-                    return@remember null
-                } catch (e: SecurityException) {
-                    lastException = e
-                    android.util.Log.w("AppIconUtils", "Security exception loading icon for $packageName: ${e.message}")
-                    // Don't retry for security exceptions
-                    return@remember null
-                } catch (e: Exception) {
-                    lastException = e
-                    android.util.Log.d("AppIconUtils", "Failed to load icon for $packageName (attempt ${attempt + 1}): ${e.message}")
-                    if (attempt == 0) {
-                        // Wait a bit before retry (only for transient errors)
-                        try {
-                            Thread.sleep(50)
-                        } catch (ie: InterruptedException) {
-                            Thread.currentThread().interrupt()
-                        }
-                    }
-                }
-            }
-            
-            // All attempts failed, try system fallback
-            try {
-                val fallback = ContextCompat.getDrawable(context, android.R.drawable.sym_def_app_icon)
-                    ?: ContextCompat.getDrawable(context, android.R.drawable.ic_menu_info_details)
-                val bitmap = fallback?.toBitmap(width = sizePx, height = sizePx, config = android.graphics.Bitmap.Config.ARGB_8888)
-                if (bitmap != null) {
-                    return@remember BitmapPainter(bitmap.asImageBitmap())
-                }
-            } catch (fallbackError: Exception) {
-                android.util.Log.w("AppIconUtils", "Fallback icon also failed: ${fallbackError.message}")
-            }
-            
-            // Return null - UI will show placeholder
-            null
         }
+    }
+
+    /**
+     * Resolves an icon to a [Painter], or null when the package cannot be resolved.
+     *
+     * Null is meaningful: callers fall back to [AppIconPlaceholder] rather than painting a
+     * generic glyph, so an unresolvable package must not be turned into a bitmap here.
+     */
+    private fun loadIconPainterOrNull(context: Context, packageName: String, sizePx: Int): Painter? {
+        val cacheKey = "${packageName}_${sizePx}"
+        cacheLock.read {
+            iconCache.get(cacheKey)?.let { return BitmapPainter(it.asImageBitmap()) }
+        }
+
+        val drawable = loadAppDrawable(context, packageName) ?: run {
+            android.util.Log.d("AppIconUtils", "No icon available for $packageName")
+            return null
+        }
+
+        val bitmap = try {
+            drawable.toBitmap(width = sizePx, height = sizePx, config = Bitmap.Config.ARGB_8888)
+        } catch (e: Exception) {
+            android.util.Log.w("AppIconUtils", "Failed to rasterise icon for $packageName: ${e.message}")
+            null
+        } ?: return null
+
+        cacheLock.write {
+            iconCache.put(cacheKey, bitmap)
+        }
+        return BitmapPainter(bitmap.asImageBitmap())
     }
     
     /**
