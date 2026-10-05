@@ -100,5 +100,87 @@ class FilterStateTest {
         
         assertThat(filterState.isActive).isFalse()
     }
+
+    // --- Translation to SQL predicates -------------------------------------------------
+    // These drive the history query directly, so a mistake here silently shows the wrong rows.
+
+    @Test
+    fun `read status translates to isRead column value`() {
+        assertThat(ReadStatusFilter.ALL.toIsReadOrNull()).isNull()
+        assertThat(ReadStatusFilter.UNREAD_ONLY.toIsReadOrNull()).isFalse()
+        assertThat(ReadStatusFilter.READ_ONLY.toIsReadOrNull()).isTrue()
+    }
+
+    @Test
+    fun `all time resolves to unbounded range`() {
+        val bounds = FilterState(timeRange = TimeRangeFilter.ALL_TIME).resolveTimeBounds(now = 1_000L)
+
+        assertThat(bounds.first).isEqualTo(Long.MIN_VALUE)
+        assertThat(bounds.last).isEqualTo(Long.MAX_VALUE)
+    }
+
+    @Test
+    fun `last 7 days resolves to a window ending now`() {
+        val now = 1_700_000_000_000L
+        val dayMs = 24 * 60 * 60 * 1000L
+
+        val bounds = FilterState(timeRange = TimeRangeFilter.LAST_7_DAYS).resolveTimeBounds(now = now)
+
+        assertThat(bounds.first).isEqualTo(now - 7 * dayMs)
+        assertThat(bounds.last).isEqualTo(Long.MAX_VALUE)
+    }
+
+    @Test
+    fun `last 30 days resolves to a window ending now`() {
+        val now = 1_700_000_000_000L
+        val dayMs = 24 * 60 * 60 * 1000L
+
+        val bounds = FilterState(timeRange = TimeRangeFilter.LAST_30_DAYS).resolveTimeBounds(now = now)
+
+        assertThat(bounds.first).isEqualTo(now - 30 * dayMs)
+        assertThat(bounds.last).isEqualTo(Long.MAX_VALUE)
+    }
+
+    @Test
+    fun `custom range resolves to the supplied bounds`() {
+        val filterState = FilterState(
+            timeRange = TimeRangeFilter.CUSTOM,
+            customTimeRange = 1_000L to 2_000L
+        )
+
+        val bounds = filterState.resolveTimeBounds(now = 9_000L)
+
+        assertThat(bounds.first).isEqualTo(1_000L)
+        assertThat(bounds.last).isEqualTo(2_000L)
+    }
+
+    @Test
+    fun `custom range without bounds falls back to unbounded`() {
+        val filterState = FilterState(timeRange = TimeRangeFilter.CUSTOM, customTimeRange = null)
+
+        val bounds = filterState.resolveTimeBounds(now = 9_000L)
+
+        assertThat(bounds.first).isEqualTo(Long.MIN_VALUE)
+        assertThat(bounds.last).isEqualTo(Long.MAX_VALUE)
+    }
+
+    @Test
+    fun `today starts at the beginning of the current day`() {
+        val now = 1_700_000_000_000L
+
+        val bounds = FilterState(timeRange = TimeRangeFilter.TODAY).resolveTimeBounds(now = now)
+
+        assertThat(bounds.first).isAtMost(now)
+        assertThat(bounds.last).isEqualTo(Long.MAX_VALUE)
+
+        val startOfDay = java.util.Calendar.getInstance().apply {
+            timeInMillis = now
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        assertThat(bounds.first).isEqualTo(startOfDay)
+    }
 }
 

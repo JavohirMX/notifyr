@@ -7,6 +7,7 @@ import com.javohirmx.notifyr.data.repository.NotificationRepository
 import com.javohirmx.notifyr.domain.ml.HybridNotificationClassifier
 import com.javohirmx.notifyr.domain.model.NotificationContext
 import com.javohirmx.notifyr.domain.model.NotificationData
+import com.javohirmx.notifyr.domain.model.NotificationGroup
 import com.javohirmx.notifyr.domain.model.NotificationImportance
 import com.javohirmx.notifyr.domain.model.NotificationTags
 import com.javohirmx.notifyr.domain.usecase.GroupNotificationsUseCase
@@ -19,6 +20,9 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
 @ExperimentalCoroutinesApi
@@ -57,12 +61,20 @@ class HistoryViewModelFilterTest {
         whenever(mockSharedPreferences.edit()).thenReturn(mockEditor)
         whenever(application.getSharedPreferences(org.mockito.kotlin.any(), org.mockito.kotlin.any())).thenReturn(mockSharedPreferences)
         
-        // Setup default repository responses
-        whenever(notificationRepository.getNotificationsByImportance(NotificationImportance.URGENT))
-            .thenReturn(flowOf(emptyList()))
-        whenever(notificationRepository.getNotificationsByImportance(NotificationImportance.NORMAL))
-            .thenReturn(flowOf(emptyList()))
-        whenever(notificationRepository.getNotificationsByImportance(NotificationImportance.IGNORE))
+        // Setup default repository responses.
+        // The history screen now pushes its filters down into SQL, so it observes
+        // getFilteredNotifications()/getDistinctApps() rather than the raw per-importance flows.
+        whenever(
+            notificationRepository.getFilteredNotifications(
+                org.mockito.kotlin.any(),
+                org.mockito.kotlin.anyOrNull(),
+                org.mockito.kotlin.any(),
+                org.mockito.kotlin.any(),
+                org.mockito.kotlin.any(),
+                org.mockito.kotlin.any()
+            )
+        ).thenReturn(flowOf(emptyList()))
+        whenever(notificationRepository.getDistinctApps())
             .thenReturn(flowOf(emptyList()))
         
         viewModel = HistoryViewModel(
@@ -206,6 +218,70 @@ class HistoryViewModelFilterTest {
         advanceUntilIdle()
         
         assertThat(viewModel.filterState.value.activeCount).isEqualTo(3)
+    }
+    
+    @Test
+    fun `marking a group read issues one batched repository call`() = runTest {
+        // Regression guard. Marking rows one at a time means one transaction per notification,
+        // and every commit re-invalidates the history flows, which re-read the whole database.
+        val group = NotificationGroup(
+            packageName = "com.test",
+            appName = "Test App",
+            notifications = (1L..25L).map { id ->
+                createTestNotification(id = id, timestamp = id * 1000L)
+            },
+            firstTimestamp = 1000L,
+            lastTimestamp = 25_000L,
+            unreadCount = 25,
+            importance = NotificationImportance.NORMAL
+        )
+
+        viewModel.markGroupAsRead(group)
+        advanceUntilIdle()
+
+        verify(notificationRepository, times(1)).markAsReadBatch(listOf(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L, 12L, 13L, 14L, 15L, 16L, 17L, 18L, 19L, 20L, 21L, 22L, 23L, 24L, 25L))
+        verify(notificationRepository, never()).markAsRead(org.mockito.kotlin.any(), org.mockito.kotlin.any())
+    }
+    
+    @Test
+    fun `deleting a group issues one batched repository call`() = runTest {
+        val group = NotificationGroup(
+            packageName = "com.test",
+            appName = "Test App",
+            notifications = (1L..25L).map { id ->
+                createTestNotification(id = id, timestamp = id * 1000L)
+            },
+            firstTimestamp = 1000L,
+            lastTimestamp = 25_000L,
+            unreadCount = 25,
+            importance = NotificationImportance.NORMAL
+        )
+
+        viewModel.deleteGroup(group)
+        advanceUntilIdle()
+
+        verify(notificationRepository, times(1)).deleteByIds(listOf(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L, 12L, 13L, 14L, 15L, 16L, 17L, 18L, 19L, 20L, 21L, 22L, 23L, 24L, 25L))
+        verify(notificationRepository, never()).deleteNotification(org.mockito.kotlin.any())
+    }
+    
+    @Test
+    fun `refresh does not accumulate collectors`() = runTest {
+        // Each refresh used to launch an additional set of collectors without cancelling the
+        // previous ones, so repeated refreshes multiplied the work per database change.
+        // One live subscription per importance tab is expected, i.e. 3 and not 3 x (1 + refreshes).
+        viewModel.refreshData()
+        viewModel.refreshData()
+        viewModel.refreshData()
+        advanceUntilIdle()
+
+        verify(notificationRepository, times(3)).getFilteredNotifications(
+            org.mockito.kotlin.any(),
+            org.mockito.kotlin.anyOrNull(),
+            org.mockito.kotlin.any(),
+            org.mockito.kotlin.any(),
+            org.mockito.kotlin.any(),
+            org.mockito.kotlin.any()
+        )
     }
     
     private fun createTestNotification(
