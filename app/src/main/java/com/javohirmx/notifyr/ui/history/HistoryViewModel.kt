@@ -11,6 +11,9 @@ import com.javohirmx.notifyr.domain.model.NotificationGroup
 import com.javohirmx.notifyr.domain.usecase.GroupNotificationsUseCase
 import com.javohirmx.notifyr.domain.ml.HybridNotificationClassifier
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -25,6 +28,16 @@ class HistoryViewModel @Inject constructor(
     val customTagRepository: com.javohirmx.notifyr.data.repository.CustomTagRepository
 ) : AndroidViewModel(application) {
     
+    companion object {
+        /**
+         * How long typing must pause before the history list re-queries.
+         *
+         * Comfortably below the ~500ms at which users start to perceive input lag, while still
+         * collapsing a burst of keystrokes into a single database round trip.
+         */
+        const val SEARCH_DEBOUNCE_MS = 300L
+    }
+    
     private val sharedPreferences = application.getSharedPreferences("notifyr_prefs", android.content.Context.MODE_PRIVATE)
     
     private val _uiState = MutableStateFlow(HistoryUiState())
@@ -35,76 +48,107 @@ class HistoryViewModel @Inject constructor(
     
     private val _filterState = MutableStateFlow(FilterState())
     val filterState: StateFlow<FilterState> = _filterState.asStateFlow()
+
+    /**
+     * Debounced so that typing does not re-query and re-group on every keystroke.
+     *
+     * The blank case is not delayed: it is both the initial value and what the field returns to
+     * when cleared, and delaying it would make the list appear to stall on open and on clear.
+     */
+    @OptIn(FlowPreview::class)
+    private val debouncedSearchQuery: Flow<String> = _searchQuery
+        .debounce { query -> if (query.isBlank()) 0L else SEARCH_DEBOUNCE_MS }
+
+    /**
+     * Declared above `init` deliberately: property initialisers run in declaration order, and
+     * `init` calls [subscribe], which touches this field.
+     */
+    private var subscriptions: List<Job> = emptyList()
     
     init {
         // Restore last selected tab
         val lastTab = sharedPreferences.getInt("history_last_tab", 0)
         _uiState.value = _uiState.value.copy(selectedTab = lastTab.coerceIn(0, 2))
-        loadNotifications()
+        subscribe()
     }
     
     fun saveSelectedTab(tabIndex: Int) {
         sharedPreferences.edit().putInt("history_last_tab", tabIndex.coerceIn(0, 2)).apply()
         _uiState.value = _uiState.value.copy(selectedTab = tabIndex.coerceIn(0, 2))
     }
-    
-    private fun loadNotifications() {
-        viewModelScope.launch {
-            combine(
-                notificationRepository.getNotificationsByImportance(NotificationImportance.URGENT),
-                notificationRepository.getNotificationsByImportance(NotificationImportance.NORMAL),
-                notificationRepository.getNotificationsByImportance(NotificationImportance.IGNORE),
-                _searchQuery,
-                _filterState
-            ) { urgent, normal, ignored, query, filterState ->
-                // Filter out notifications with both empty title and text
-                val nonEmptyUrgent = urgent.filter { it.title.isNotBlank() || it.text.isNotBlank() }
-                val nonEmptyNormal = normal.filter { it.title.isNotBlank() || it.text.isNotBlank() }
-                val nonEmptyIgnored = ignored.filter { it.title.isNotBlank() || it.text.isNotBlank() }
-                
-                // Extract available apps from all notifications
-                val allNotifications = nonEmptyUrgent + nonEmptyNormal + nonEmptyIgnored
-                val availableApps = allNotifications
-                    .distinctBy { it.packageName }
-                    .map { AppInfo(it.packageName, it.appName) }
-                    .sortedBy { it.appName }
-                
-                // Apply search query
-                val searchedUrgent = applySearchFilter(nonEmptyUrgent, query)
-                val searchedNormal = applySearchFilter(nonEmptyNormal, query)
-                val searchedIgnored = applySearchFilter(nonEmptyIgnored, query)
-                
-                // Apply filters
-                val filteredUrgent = applyFilters(searchedUrgent, filterState)
-                val filteredNormal = applyFilters(searchedNormal, filterState)
-                val filteredIgnored = applyFilters(searchedIgnored, filterState)
-                
-                // Apply grouping to filtered notifications
-                val groupedUrgent = applyGroupFilters(
-                    groupNotificationsUseCase.execute(filteredUrgent),
-                    filterState
-                )
-                val groupedNormal = applyGroupFilters(
-                    groupNotificationsUseCase.execute(filteredNormal),
-                    filterState
-                )
-                val groupedIgnored = applyGroupFilters(
-                    groupNotificationsUseCase.execute(filteredIgnored),
-                    filterState
-                )
-                
-                _uiState.value = _uiState.value.copy(
-                    urgentNotifications = groupedUrgent,
-                    normalNotifications = groupedNormal,
-                    ignoredNotifications = groupedIgnored,
-                    isLoading = false,
-                    filterState = filterState,
-                    availableApps = availableApps
-                )
-            }.collect()
+
+    /**
+     * Starts (or restarts) the collectors backing the screen.
+     *
+     * Each importance is observed independently rather than through one big `combine`, so
+     * changing a filter no longer re-processes all three tabs, and changing one tab's data does
+     * not re-process the other two.
+     */
+    private fun subscribe() {
+        subscriptions.forEach { it.cancel() }
+        subscriptions = listOf(
+            observeNotifications(NotificationImportance.URGENT) { items ->
+                _uiState.update { it.copy(urgentNotifications = items, isLoading = false) }
+            },
+            observeNotifications(NotificationImportance.NORMAL) { items ->
+                _uiState.update { it.copy(normalNotifications = items, isLoading = false) }
+            },
+            observeNotifications(NotificationImportance.IGNORE) { items ->
+                _uiState.update { it.copy(ignoredNotifications = items, isLoading = false) }
+            },
+            observeAvailableApps()
+        )
+    }
+
+    private fun observeAvailableApps(): Job = viewModelScope.launch {
+        notificationRepository.getDistinctApps().collect { rows ->
+            val apps = rows
+                .map { AppInfo(it.packageName, it.appName) }
+                .sortedBy { it.appName }
+            _uiState.update { it.copy(availableApps = apps) }
         }
     }
-    
+
+    /**
+     * Rows for one importance, with read/app/time/sender filters pushed down into SQL.
+     *
+     * Re-subscribes whenever the filter state changes so the database does the narrowing.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun notificationsFlow(importance: NotificationImportance): Flow<List<NotificationData>> =
+        _filterState.flatMapLatest { filterState ->
+            val bounds = filterState.resolveTimeBounds()
+            notificationRepository.getFilteredNotifications(
+                importance = importance,
+                readStatus = filterState.readStatus.toIsReadOrNull(),
+                startTime = bounds.first,
+                endTime = bounds.last,
+                selectedApps = filterState.selectedApps,
+                senderQuery = filterState.senderQuery.trim()
+            )
+        }
+
+    private fun observeNotifications(
+        importance: NotificationImportance,
+        onItems: (List<NotificationItem>) -> Unit
+    ): Job = viewModelScope.launch {
+        combine(
+            notificationsFlow(importance),
+            debouncedSearchQuery,
+            _filterState
+        ) { notifications, query, filterState ->
+            // Read/app/time/sender are already applied by the query. Only the two filters that
+            // are not worth indexing remain here: free-text search, and context matching against
+            // the JSON-encoded tags.
+            val searched = applySearchFilter(notifications, query)
+            val contextFiltered = applyContextFilter(searched, filterState)
+            applyGroupFilters(
+                groupNotificationsUseCase.execute(contextFiltered),
+                filterState
+            )
+        }.collect(onItems)
+    }
+
     private fun applySearchFilter(
         notifications: List<NotificationData>,
         query: String
@@ -117,81 +161,16 @@ class HistoryViewModel @Inject constructor(
             it.appName.contains(query, ignoreCase = true)
         }
     }
-    
-    private fun applyFilters(
+
+    private fun applyContextFilter(
         notifications: List<NotificationData>,
         filterState: FilterState
     ): List<NotificationData> {
-        var filtered = notifications
-        
-        // Read status filter
-        filtered = when (filterState.readStatus) {
-            ReadStatusFilter.ALL -> filtered
-            ReadStatusFilter.UNREAD_ONLY -> filtered.filter { !it.isRead }
-            ReadStatusFilter.READ_ONLY -> filtered.filter { it.isRead }
+        if (filterState.selectedContexts.isEmpty()) return notifications
+
+        return notifications.filter { notification ->
+            notification.tags.contexts.any { it in filterState.selectedContexts }
         }
-        
-        // App filter
-        if (filterState.selectedApps.isNotEmpty()) {
-            filtered = filtered.filter { it.packageName in filterState.selectedApps }
-        }
-        
-        // Time range filter
-        filtered = applyTimeRangeFilter(filtered, filterState)
-        
-        // Context filter
-        if (filterState.selectedContexts.isNotEmpty()) {
-            filtered = filtered.filter { notification ->
-                notification.tags.contexts.any { it in filterState.selectedContexts }
-            }
-        }
-        
-        // Sender filter
-        if (filterState.senderQuery.isNotBlank()) {
-            filtered = filtered.filter { notification ->
-                notification.sender?.contains(filterState.senderQuery, ignoreCase = true) == true
-            }
-        }
-        
-        return filtered
-    }
-    
-    private fun applyTimeRangeFilter(
-        notifications: List<NotificationData>,
-        filterState: FilterState
-    ): List<NotificationData> {
-        val now = System.currentTimeMillis()
-        
-        return when (filterState.timeRange) {
-            TimeRangeFilter.ALL_TIME -> notifications
-            TimeRangeFilter.TODAY -> {
-                val startOfDay = getStartOfDay(now)
-                notifications.filter { it.timestamp >= startOfDay }
-            }
-            TimeRangeFilter.LAST_7_DAYS -> {
-                val sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000L)
-                notifications.filter { it.timestamp >= sevenDaysAgo }
-            }
-            TimeRangeFilter.LAST_30_DAYS -> {
-                val thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000L)
-                notifications.filter { it.timestamp >= thirtyDaysAgo }
-            }
-            TimeRangeFilter.CUSTOM -> {
-                filterState.customTimeRange?.let { (start, end) ->
-                    notifications.filter { it.timestamp in start..end }
-                } ?: notifications
-            }
-        }
-    }
-    
-    private fun getStartOfDay(timestamp: Long): Long {
-        val calendar = java.util.Calendar.getInstance()
-        calendar.timeInMillis = timestamp
-        calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
-        calendar.set(java.util.Calendar.MINUTE, 0)
-        calendar.set(java.util.Calendar.SECOND, 0)
-        calendar.set(java.util.Calendar.MILLISECOND, 0)
-        return calendar.timeInMillis
     }
     
     private fun applyGroupFilters(
@@ -287,23 +266,22 @@ class HistoryViewModel @Inject constructor(
     
     fun markGroupAsRead(group: NotificationGroup) {
         viewModelScope.launch {
-            group.notifications.forEach { notification ->
-                notificationRepository.markAsRead(notification.id, true)
-            }
+            notificationRepository.markAsReadBatch(group.notifications.map { it.id })
         }
     }
     
     fun deleteGroup(group: NotificationGroup) {
         viewModelScope.launch {
-            group.notifications.forEach { notification ->
-                notificationRepository.deleteNotification(notification)
-            }
+            notificationRepository.deleteByIds(group.notifications.map { it.id })
         }
     }
     
     fun refreshData() {
-        _uiState.value = _uiState.value.copy(isLoading = true)
-        loadNotifications()
+        _uiState.update { it.copy(isLoading = true) }
+        // Re-subscribing cancels the previous collectors first. Previously this launched an
+        // additional collector on every refresh, so each pull-to-refresh left another set of
+        // full-history collectors running alongside the existing ones.
+        subscribe()
     }
     
     /**
@@ -385,7 +363,9 @@ data class HistoryUiState(
     val ignoredNotifications: List<NotificationItem> = emptyList(),
     val isLoading: Boolean = true,
     val selectedTab: Int = 0,
-    val filterState: FilterState = FilterState(),
+    // Filters are intentionally not mirrored here. They are owned by [filterState] and are
+    // consumed directly by the screen; duplicating them would leave a stale copy that no
+    // longer tracks the active filters.
     val availableApps: List<AppInfo> = emptyList() // For app filter dropdown
 )
 

@@ -576,6 +576,14 @@ fun NotificationList(
                         // Items in this date group
                         items(
                             items = dateGroup.items,
+                            // Distinct slot types so Compose can reuse a rendered card between rows
+                            // instead of treating every row as structurally unique.
+                            contentType = { item ->
+                                when (item) {
+                                    is NotificationItem.Single -> "single"
+                                    is NotificationItem.Group -> "group"
+                                }
+                            },
                             key = { item ->
                                 when (item) {
                                     is NotificationItem.Single -> "single_${item.notification.id}"
@@ -1670,6 +1678,38 @@ private fun groupNotificationsByDate(notifications: List<NotificationItem>): Lis
     }
 }
 
+/**
+ * Cached formatter for absolute timestamps.
+ *
+ * `SimpleDateFormat` is comparatively expensive to construct and this runs once per visible row
+ * per recomposition, so instances are pooled per thread. The pool is keyed on the current
+ * default locale, which the user can change at runtime, so a locale switch rebuilds rather than
+ * formatting in the wrong language.
+ */
+private class CachedDateFormatter(
+    val locale: java.util.Locale,
+    val formatter: java.text.SimpleDateFormat
+)
+
+private val dateFormatterPool: ThreadLocal<CachedDateFormatter> =
+    ThreadLocal.withInitial {
+        CachedDateFormatter(
+            java.util.Locale.getDefault(),
+            java.text.SimpleDateFormat("MMM dd, h:mm a", java.util.Locale.getDefault())
+        )
+    }
+
+private fun formatAbsoluteTimestamp(timestamp: Long): String {
+    val locale = java.util.Locale.getDefault()
+    val cached = dateFormatterPool.get()
+    if (cached.locale != locale) {
+        dateFormatterPool.set(
+            CachedDateFormatter(locale, java.text.SimpleDateFormat("MMM dd, h:mm a", locale))
+        )
+    }
+    return dateFormatterPool.get().formatter.format(java.util.Date(timestamp))
+}
+
 private fun formatTimestamp(timestamp: Long): String {
     val now = System.currentTimeMillis()
     val diff = now - timestamp
@@ -1679,11 +1719,8 @@ private fun formatTimestamp(timestamp: Long): String {
         diff < 60_000 -> "Just now"
         diff < 3600_000 -> "${diff / 60_000}m ago"
         diff < fiveHours -> "${diff / 3600_000}h ago"
-        else -> {
-            // Show actual date and time for notifications over 5 hours old
-            val dateFormat = java.text.SimpleDateFormat("MMM dd, h:mm a", java.util.Locale.getDefault())
-            dateFormat.format(java.util.Date(timestamp))
-        }
+        // Show actual date and time for notifications over 5 hours old
+        else -> formatAbsoluteTimestamp(timestamp)
     }
 }
 
