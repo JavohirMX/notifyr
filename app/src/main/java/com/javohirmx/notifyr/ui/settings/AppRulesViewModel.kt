@@ -33,12 +33,12 @@ class AppRulesViewModel @Inject constructor(
         viewModelScope.launch {
             combine(
                 appRulesRepository.appRules,
-                notificationRepository.getAllNotifications(),
+                notificationRepository.getDistinctApps(),
                 temporaryAppStatusRepository.activeStatuses
-            ) { rules, notifications, tempStatuses ->
-                // Extract unique apps from notifications
-                val apps = notifications
-                    .distinctBy { it.packageName }
+            ) { rules, distinctApps, tempStatuses ->
+                // The app list comes from a DISTINCT projection rather than loading every
+                // notification and de-duplicating in memory.
+                val apps = distinctApps
                     .map { AppInfo(it.packageName, it.appName) }
                     .sortedBy { it.appName }
                 

@@ -32,22 +32,20 @@ class DashboardViewModel @Inject constructor(
     
     private fun loadDashboardData() {
         viewModelScope.launch {
-            // Load notification counts
+            // Counts and the small preview slice are each served by an aggregate/projection
+            // query. Previously this combined three full-table reads just to take .size and
+            // .take(5), which meant re-reading the whole history on every database change.
             combine(
-                notificationRepository.getNotificationsByImportance(NotificationImportance.URGENT),
-                notificationRepository.getNotificationsByImportance(NotificationImportance.NORMAL),
-                notificationRepository.getNotificationsByImportance(NotificationImportance.IGNORE)
-            ) { urgent, normal, ignored ->
-                // Filter out notifications with both empty title and text
-                val nonEmptyUrgent = urgent.filter { it.title.isNotBlank() || it.text.isNotBlank() }
-                val nonEmptyNormal = normal.filter { it.title.isNotBlank() || it.text.isNotBlank() }
-                val nonEmptyIgnored = ignored.filter { it.title.isNotBlank() || it.text.isNotBlank() }
-                
+                notificationRepository.countNonEmptyByImportance(NotificationImportance.URGENT),
+                notificationRepository.countNonEmptyByImportance(NotificationImportance.NORMAL),
+                notificationRepository.countNonEmptyByImportance(NotificationImportance.IGNORE),
+                notificationRepository.getTopByImportance(NotificationImportance.URGENT, 5)
+            ) { urgentCount, normalCount, ignoredCount, recentUrgent ->
                 _uiState.value = _uiState.value.copy(
-                    urgentCount = nonEmptyUrgent.size,
-                    normalCount = nonEmptyNormal.size,
-                    ignoredCount = nonEmptyIgnored.size,
-                    recentUrgentNotifications = nonEmptyUrgent.take(5) // Show only 5 most recent
+                    urgentCount = urgentCount,
+                    normalCount = normalCount,
+                    ignoredCount = ignoredCount,
+                    recentUrgentNotifications = recentUrgent // Show only 5 most recent
                 )
             }.collect()
         }

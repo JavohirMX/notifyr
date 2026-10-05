@@ -230,9 +230,8 @@ class SmartDigestScheduler @Inject constructor(
         // Get notifications from last 4 hours
         val fourHoursAgo = System.currentTimeMillis() - TimeUnit.HOURS.toMillis(4)
         val notifications = notificationRepository
-            .getNotificationsByDateRange(fourHoursAgo, System.currentTimeMillis())
-            .first()
-            .filter { !it.isRead && it.importance == NotificationImportance.NORMAL }
+            .getByImportanceInRange(fourHoursAgo, System.currentTimeMillis(), NotificationImportance.NORMAL)
+            .filter { !it.isRead }
         
         if (notifications.isEmpty()) {
             return
@@ -250,10 +249,13 @@ class SmartDigestScheduler @Inject constructor(
     
     private suspend fun getUnreadNormalCount(): Int {
         val fourHoursAgo = System.currentTimeMillis() - TimeUnit.HOURS.toMillis(4)
-        return notificationRepository
-            .getNotificationsByDateRange(fourHoursAgo, System.currentTimeMillis())
-            .first()
-            .count { !it.isRead && it.importance == NotificationImportance.NORMAL }
+        // Counting in SQL rather than loading the window and counting in Kotlin. This runs on
+        // every NORMAL notification the listener processes, so it is a genuinely hot path.
+        return notificationRepository.countUnreadByImportanceInRange(
+            startTime = fourHoursAgo,
+            endTime = System.currentTimeMillis(),
+            importance = NotificationImportance.NORMAL
+        )
     }
     
     private fun isBreakTime(): Boolean {
