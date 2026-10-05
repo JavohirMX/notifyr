@@ -1,6 +1,7 @@
 package com.javohirmx.notifyr.data.repository
 
 import com.javohirmx.notifyr.data.database.NotificationDao
+import com.javohirmx.notifyr.data.database.AppName
 import com.javohirmx.notifyr.data.database.toEntity
 import com.javohirmx.notifyr.data.database.toDomain
 import com.javohirmx.notifyr.domain.model.NotificationData
@@ -313,6 +314,93 @@ class NotificationRepository @Inject constructor(
     
     suspend fun deleteNotification(notification: NotificationData) {
         notificationDao.deleteNotification(notification.toEntity())
+    }
+
+    /**
+     * Marks many notifications read in one transaction.
+     *
+     * Preferred over looping [markAsRead]: every row-wise call is its own transaction, and each
+     * commit invalidates the UI's Room flows, which re-query and re-process the full history.
+     */
+    suspend fun markAsReadBatch(ids: List<Long>, isRead: Boolean = true) {
+        notificationDao.markAsReadBatch(ids, isRead)
+    }
+
+    /** Batched counterpart of [deleteNotification]; see [markAsReadBatch] for why it is one transaction. */
+    suspend fun deleteByIds(ids: List<Long>) {
+        notificationDao.deleteByIds(ids)
+    }
+
+    // ---- Aggregates & projections -------------------------------------------------
+    // Screens that only need a number, or a short list, use these rather than materialising
+    // the entire history into memory.
+
+    fun countNonEmptyByImportance(importance: NotificationImportance): Flow<Int> {
+        return notificationDao.countNonEmptyByImportance(importance.value)
+    }
+
+    fun getTopByImportance(importance: NotificationImportance, limit: Int): Flow<List<NotificationData>> {
+        return notificationDao.getTopByImportance(importance.value, limit).map { entities ->
+            entities.map { it.toDomain() }
+        }
+    }
+
+    fun getDistinctApps(): Flow<List<AppName>> {
+        return notificationDao.getDistinctApps()
+    }
+
+    suspend fun countUnreadByImportanceInRange(
+        startTime: Long,
+        endTime: Long,
+        importance: NotificationImportance
+    ): Int {
+        return notificationDao.countUnreadByImportanceInRange(startTime, endTime, importance.value)
+    }
+
+    suspend fun getByImportanceInRange(
+        startTime: Long,
+        endTime: Long,
+        importance: NotificationImportance
+    ): List<NotificationData> {
+        return notificationDao.getByImportanceInRange(startTime, endTime, importance.value)
+            .map { it.toDomain() }
+    }
+
+    /**
+     * History list for one importance with read/app/time/sender filters applied in SQL.
+     *
+     * Doing this in the database rather than in Kotlin means a filter change only re-reads the
+     * matching rows, instead of re-reading and re-processing the entire history.
+     *
+     * @param readStatus null means "either read state".
+     * @param selectedApps empty means "no app filter".
+     */
+    fun getFilteredNotifications(
+        importance: NotificationImportance,
+        readStatus: Boolean?,
+        startTime: Long,
+        endTime: Long,
+        selectedApps: Set<String>,
+        senderQuery: String = ""
+    ): Flow<List<NotificationData>> {
+        val source = if (selectedApps.isEmpty()) {
+            notificationDao.getFilteredByImportance(
+                importance = importance.value,
+                readStatus = readStatus,
+                startTime = startTime,
+                endTime = endTime
+            )
+        } else {
+            notificationDao.getFilteredByImportanceAndApps(
+                importance = importance.value,
+                readStatus = readStatus,
+                startTime = startTime,
+                endTime = endTime,
+                selectedApps = selectedApps.toList(),
+                senderQuery = senderQuery
+            )
+        }
+        return source.map { entities -> entities.map { it.toDomain() } }
     }
     
     suspend fun deleteOldNotifications(cutoffTime: Long): Int {

@@ -31,7 +31,8 @@ object DatabaseModule {
             NotifyrDatabase.MIGRATION_2_3,
             NotifyrDatabase.MIGRATION_3_4,
             NotifyrDatabase.MIGRATION_4_5,
-            NotifyrDatabase.MIGRATION_5_6
+            NotifyrDatabase.MIGRATION_5_6,
+            NotifyrDatabase.MIGRATION_6_7
         )
         .fallbackToDestructiveMigration() // For MVP, allow destructive migration if needed
         .build()
