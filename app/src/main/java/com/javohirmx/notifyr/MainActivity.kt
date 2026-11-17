@@ -19,6 +19,7 @@ import androidx.navigation.compose.rememberNavController
 import com.javohirmx.notifyr.data.repository.AppLockRepository
 import com.javohirmx.notifyr.ui.components.BottomNavigationBar
 import com.javohirmx.notifyr.ui.navigation.NotifyrNavigation
+import com.javohirmx.notifyr.ui.navigation.OpenRouteResolver
 import com.javohirmx.notifyr.ui.navigation.Screen
 import com.javohirmx.notifyr.ui.security.AppLockGate
 import com.javohirmx.notifyr.ui.security.AppLockViewModel
@@ -40,13 +41,17 @@ class MainActivity : ComponentActivity() {
         launchRouteState.value = resolveOpenRoute(intent)
         setContent {
             NotifyrTheme {
-                NotifyrApp(initialOpenRoute = launchRouteState.value)
+                NotifyrApp(
+                    initialOpenRoute = launchRouteState.value,
+                    onInitialRouteConsumed = ::consumeLaunchRoute
+                )
             }
         }
     }
 
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
         launchRouteState.value = resolveOpenRoute(intent)
     }
 
@@ -56,20 +61,27 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun resolveOpenRoute(intent: android.content.Intent?): String? {
-        val openTab = intent?.getStringExtra("open_tab") ?: return null
-        return when (openTab) {
-            Screen.Dashboard.route -> Screen.Dashboard.route
-            Screen.History.route -> Screen.History.route
-            Screen.Settings.route -> Screen.Settings.route
-            Screen.ScreenTime.route -> Screen.ScreenTime.route
-            Screen.Insights.route -> Screen.Insights.route
-            else -> null
-        }
+        return OpenRouteResolver.resolve(
+            intent?.getStringExtra(OpenRouteResolver.EXTRA_OPEN_TAB)
+        )
+    }
+
+    /**
+     * A notification tap should move the user to the requested screen once. Keeping the
+     * route around made the navigation effect pull the user back to that tab forever.
+     */
+    private fun consumeLaunchRoute() {
+        launchRouteState.value = null
+        // Also drop the extra so a configuration change does not replay the deep link.
+        intent?.removeExtra(OpenRouteResolver.EXTRA_OPEN_TAB)
     }
 }
 
 @Composable
-fun NotifyrApp(initialOpenRoute: String? = null) {
+fun NotifyrApp(
+    initialOpenRoute: String? = null,
+    onInitialRouteConsumed: () -> Unit = {}
+) {
     val appLockViewModel: AppLockViewModel = androidx.hilt.navigation.compose.hiltViewModel()
     val appLockState by appLockViewModel.uiState.collectAsStateWithLifecycle()
     val navController = rememberNavController()
@@ -109,6 +121,9 @@ fun NotifyrApp(initialOpenRoute: String? = null) {
                 restoreState = true
             }
         }
+
+        // Consume the route so later bottom-navigation changes are not overridden.
+        onInitialRouteConsumed()
     }
     
     // Monitor onboarding completion when route changes (especially when leaving onboarding)
