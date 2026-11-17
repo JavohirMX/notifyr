@@ -42,13 +42,18 @@ class DigestViewModel @Inject constructor(
     fun markAllAsRead() {
         viewModelScope.launch {
             currentDigest.value?.let { digest ->
-                val allNotifications = digest.needsAttention + 
+                val allNotifications = digest.needsAttention +
                     digest.conversations.flatMap { it.notifications } +
                     digest.appGroups.flatMap { it.notifications }
-                
-                allNotifications.forEach { notification ->
-                    notificationRepository.markAsRead(notification.id, true)
-                }
+
+                // A notification can appear in more than one digest section, so de-duplicate
+                // before the batch write. One transaction avoids re-querying every flow per row.
+                val ids = allNotifications
+                    .map { it.id }
+                    .filter { it > 0L }
+                    .distinct()
+
+                notificationRepository.markAsReadBatch(ids, true)
                 
                 // Refresh digest after marking all as read
                 refreshDigest()
