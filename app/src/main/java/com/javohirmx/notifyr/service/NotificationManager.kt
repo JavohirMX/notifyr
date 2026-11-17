@@ -215,11 +215,9 @@ class NotificationManager @Inject constructor(
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
         
-        // Show heads-up notification for urgent items
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            notificationBuilder.setFullScreenIntent(pendingIntent, false)
-        }
-        
+        // Deliberately no full-screen intent: it is a restricted permission on Android 14+,
+        // is not declared in the manifest, and would interrupt the user for every urgent
+        // notification. PRIORITY_HIGH already produces a heads-up notification.
         try {
             notificationManager.notify(
                 NotificationIds.urgent(notification.id),
