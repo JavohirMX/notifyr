@@ -25,6 +25,15 @@ class KeywordRulesRepository @Inject constructor(
     
     private val _keywordRules = MutableStateFlow<List<KeywordRule>>(emptyList())
     val keywordRules: StateFlow<List<KeywordRule>> = _keywordRules.asStateFlow()
+
+    /**
+     * Guards [_keywordRules] against the initial asynchronous load overwriting local mutations.
+     *
+     * Defaults are seeded synchronously in [init], so the load task must not re-seed them when
+     * the user (or a test) has already cleared or changed the rules while it was still reading.
+     */
+    private val stateLock = Any()
+    private var hasLocalChanges = false
     
     init {
         // Start with in-memory defaults immediately for deterministic behavior,
@@ -37,44 +46,41 @@ class KeywordRulesRepository @Inject constructor(
         try {
             val settings = dataStore.data.first()
             val json = settings.keywordRulesJson
-            
-            if (json.isNotEmpty() && json != "[]") {
-                // We have previously persisted keywords – merge them with whatever
-                // is currently in memory so we don't clobber rules that may have
-                // been added before this load completes (important for tests and
-                // for any early in-memory mutations).
-                val persistedRules = Json.decodeFromString<List<KeywordRule>>(json)
-                val currentRules = _keywordRules.value
-                
-                // Persisted rules take precedence by keyword (case-insensitive),
-                // but we keep any additional in-memory rules that don't exist
-                // in the persisted set.
-                val persistedByKey = persistedRules.associateBy { it.keyword.lowercase() }
-                val merged = buildList {
-                    addAll(persistedRules)
-                    currentRules.forEach { rule ->
-                        val key = rule.keyword.lowercase()
-                        if (!persistedByKey.containsKey(key)) {
-                            add(rule)
+
+            synchronized(stateLock) {
+                // A local mutation wins over whatever was on disk when this load started.
+                if (hasLocalChanges) return
+
+                if (json.isNotEmpty() && json != "[]") {
+                    // We have previously persisted keywords – merge them with the in-memory
+                    // defaults so defaults added in a later release are not lost.
+                    val persistedRules = Json.decodeFromString<List<KeywordRule>>(json)
+                    val currentRules = _keywordRules.value
+
+                    // Persisted rules take precedence by keyword (case-insensitive),
+                    // but we keep any additional in-memory rules that don't exist
+                    // in the persisted set.
+                    val persistedByKey = persistedRules.associateBy { it.keyword.lowercase() }
+                    val merged = buildList {
+                        addAll(persistedRules)
+                        currentRules.forEach { rule ->
+                            val key = rule.keyword.lowercase()
+                            if (!persistedByKey.containsKey(key)) {
+                                add(rule)
+                            }
                         }
                     }
+
+                    _keywordRules.value = merged.sortedWith(
+                        compareBy<KeywordRule> { it.importance.ordinal }
+                            .thenBy { it.keyword.lowercase() }
+                    )
                 }
-                
-                _keywordRules.value = merged.sortedWith(
-                    compareBy<KeywordRule> { it.importance.ordinal }
-                        .thenBy { it.keyword.lowercase() }
-                )
-            } else {
-                // Only fall back to defaults if we truly have nothing loaded yet.
-                if (_keywordRules.value.isEmpty()) {
-                    initializeDefaultKeywords()
-                }
+                // An empty persisted value keeps the defaults seeded in init. Re-seeding here
+                // used to resurrect defaults after a clear that happened before this load.
             }
         } catch (e: Exception) {
-            // On error, only initialize defaults if nothing is in memory yet.
-            if (_keywordRules.value.isEmpty()) {
-                initializeDefaultKeywords()
-            }
+            // Keep whatever is already in memory; defaults were seeded synchronously in init.
         }
     }
     
@@ -131,60 +137,74 @@ class KeywordRulesRepository @Inject constructor(
     }
     
     fun addKeywordRule(keyword: String, importance: NotificationImportance, isRegex: Boolean = false) {
-        val currentRules = _keywordRules.value.toMutableList()
-        
-        // Check if keyword already exists
-        val existingIndex = currentRules.indexOfFirst { it.keyword.equals(keyword, ignoreCase = true) }
-        
-        if (existingIndex >= 0) {
-            // Update existing rule
-            currentRules[existingIndex] = currentRules[existingIndex].copy(
-                importance = importance,
-                isRegex = isRegex,
-                isEnabled = true
-            )
-        } else {
-            // Add new rule
-            currentRules.add(
-                KeywordRule(
-                    keyword = keyword,
+        synchronized(stateLock) {
+            hasLocalChanges = true
+            val currentRules = _keywordRules.value.toMutableList()
+
+            // Check if keyword already exists
+            val existingIndex = currentRules.indexOfFirst { it.keyword.equals(keyword, ignoreCase = true) }
+
+            if (existingIndex >= 0) {
+                // Update existing rule
+                currentRules[existingIndex] = currentRules[existingIndex].copy(
                     importance = importance,
-                    isEnabled = true,
-                    isRegex = isRegex
+                    isRegex = isRegex,
+                    isEnabled = true
                 )
+            } else {
+                // Add new rule
+                currentRules.add(
+                    KeywordRule(
+                        keyword = keyword,
+                        importance = importance,
+                        isEnabled = true,
+                        isRegex = isRegex
+                    )
+                )
+            }
+
+            _keywordRules.value = currentRules.sortedWith(
+                compareBy<KeywordRule> { it.importance.ordinal }
+                    .thenBy { it.keyword.lowercase() }
             )
         }
-        
-        _keywordRules.value = currentRules.sortedWith(
-            compareBy<KeywordRule> { it.importance.ordinal }
-                .thenBy { it.keyword.lowercase() }
-        )
-        
+
         scope.launch {
             saveKeywordRules()
         }
     }
     
     fun removeKeywordRule(keyword: String) {
-        val currentRules = _keywordRules.value.toMutableList()
-        currentRules.removeAll { it.keyword.equals(keyword, ignoreCase = true) }
-        _keywordRules.value = currentRules
-        
+        synchronized(stateLock) {
+            hasLocalChanges = true
+            val currentRules = _keywordRules.value.toMutableList()
+            currentRules.removeAll { it.keyword.equals(keyword, ignoreCase = true) }
+            _keywordRules.value = currentRules
+        }
+
         scope.launch {
             saveKeywordRules()
         }
     }
     
     fun toggleKeywordRule(keyword: String) {
-        val currentRules = _keywordRules.value.toMutableList()
-        val index = currentRules.indexOfFirst { it.keyword.equals(keyword, ignoreCase = true) }
-        
-        if (index >= 0) {
-            currentRules[index] = currentRules[index].copy(
-                isEnabled = !currentRules[index].isEnabled
-            )
-            _keywordRules.value = currentRules
-            
+        val changed = synchronized(stateLock) {
+            val currentRules = _keywordRules.value.toMutableList()
+            val index = currentRules.indexOfFirst { it.keyword.equals(keyword, ignoreCase = true) }
+
+            if (index < 0) {
+                false
+            } else {
+                hasLocalChanges = true
+                currentRules[index] = currentRules[index].copy(
+                    isEnabled = !currentRules[index].isEnabled
+                )
+                _keywordRules.value = currentRules
+                true
+            }
+        }
+
+        if (changed) {
             scope.launch {
                 saveKeywordRules()
             }
@@ -192,21 +212,29 @@ class KeywordRulesRepository @Inject constructor(
     }
     
     fun updateKeywordRule(oldKeyword: String, newKeyword: String, importance: NotificationImportance, isRegex: Boolean) {
-        val currentRules = _keywordRules.value.toMutableList()
-        val index = currentRules.indexOfFirst { it.keyword.equals(oldKeyword, ignoreCase = true) }
-        
-        if (index >= 0) {
-            currentRules[index] = KeywordRule(
-                keyword = newKeyword,
-                importance = importance,
-                isEnabled = currentRules[index].isEnabled,
-                isRegex = isRegex
-            )
-            _keywordRules.value = currentRules.sortedWith(
-                compareBy<KeywordRule> { it.importance.ordinal }
-                    .thenBy { it.keyword.lowercase() }
-            )
-            
+        val changed = synchronized(stateLock) {
+            val currentRules = _keywordRules.value.toMutableList()
+            val index = currentRules.indexOfFirst { it.keyword.equals(oldKeyword, ignoreCase = true) }
+
+            if (index < 0) {
+                false
+            } else {
+                hasLocalChanges = true
+                currentRules[index] = KeywordRule(
+                    keyword = newKeyword,
+                    importance = importance,
+                    isEnabled = currentRules[index].isEnabled,
+                    isRegex = isRegex
+                )
+                _keywordRules.value = currentRules.sortedWith(
+                    compareBy<KeywordRule> { it.importance.ordinal }
+                        .thenBy { it.keyword.lowercase() }
+                )
+                true
+            }
+        }
+
+        if (changed) {
             scope.launch {
                 saveKeywordRules()
             }

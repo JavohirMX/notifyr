@@ -19,21 +19,15 @@ class AppRulesRepositoryTest {
     private lateinit var dataStore: androidx.datastore.core.DataStore<com.javohirmx.notifyr.data.datastore.AppSettings>
     
     @Before
-    fun setup() = runTest {
+    fun setup() {
         // Create an in-memory DataStore for testing
         dataStore = androidx.datastore.core.DataStoreFactory.create(
             serializer = com.javohirmx.notifyr.data.datastore.SettingsSerializer,
             produceFile = { java.io.File.createTempFile("test_settings", ".json") }
         )
+        // Defaults are seeded synchronously by the constructor; the persisted load runs
+        // asynchronously but will not overwrite any local change made by a test.
         repository = AppRulesRepository(dataStore)
-        
-        // Wait for initialization to complete by waiting for non-empty rules
-        // This ensures the repository's init block has finished loading default rules
-        var attempts = 0
-        while (repository.appRules.value.isEmpty() && attempts < 50) {
-            kotlinx.coroutines.delay(10)
-            attempts++
-        }
     }
     
     @Test
@@ -220,14 +214,7 @@ class AppRulesRepositoryTest {
         // When
         repository.resetToDefaults()
         
-        // Wait for resetToDefaults coroutine to complete
-        var attempts = 0
-        while (repository.appRules.value.isEmpty() && attempts < 50) {
-            kotlinx.coroutines.delay(10)
-            attempts++
-        }
-        
-        // Then
+        // Then - resetToDefaults seeds defaults synchronously before persisting.
         val restoredRules = repository.appRules.first()
         assertThat(restoredRules).isNotEmpty()
         

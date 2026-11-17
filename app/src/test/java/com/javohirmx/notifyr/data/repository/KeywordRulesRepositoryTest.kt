@@ -19,16 +19,15 @@ class KeywordRulesRepositoryTest {
     private lateinit var dataStore: androidx.datastore.core.DataStore<com.javohirmx.notifyr.data.datastore.AppSettings>
     
     @Before
-    fun setup() = runTest {
+    fun setup() {
         // Create an in-memory DataStore for testing
         dataStore = androidx.datastore.core.DataStoreFactory.create(
             serializer = com.javohirmx.notifyr.data.datastore.SettingsSerializer,
             produceFile = { java.io.File.createTempFile("test_keyword_settings", ".json") }
         )
+        // Defaults are seeded synchronously by the constructor; the persisted load runs
+        // asynchronously but will not overwrite any local change made by a test.
         repository = KeywordRulesRepository(dataStore)
-        
-        // Wait briefly for initialization coroutine to load defaults
-        kotlinx.coroutines.delay(50)
     }
     
     @Test

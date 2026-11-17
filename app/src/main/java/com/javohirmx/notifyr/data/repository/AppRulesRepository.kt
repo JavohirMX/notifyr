@@ -36,6 +36,15 @@ class AppRulesRepository @Inject constructor(
     
     private val _appRules = MutableStateFlow<Map<String, AppRule>>(emptyMap())
     val appRules: StateFlow<Map<String, AppRule>> = _appRules.asStateFlow()
+
+    /**
+     * Guards [_appRules] against the initial asynchronous load overwriting local mutations.
+     *
+     * Defaults are seeded synchronously in [init], so the load task must not re-seed them when
+     * the user (or a test) has already cleared or changed the rules while it was still reading.
+     */
+    private val stateLock = Any()
+    private var hasLocalChanges = false
     
     init {
         // Start with in-memory defaults immediately for deterministic behavior,
@@ -50,34 +59,33 @@ class AppRulesRepository @Inject constructor(
         try {
             val settings = dataStore.data.first()
             val json = settings.appRulesJson
-            
-            if (json.isNotEmpty() && json != "[]") {
-                val persistedList = Json.decodeFromString<List<AppRule>>(json)
-                val persistedMap = persistedList.associateBy { it.packageName }
-                val currentMap = _appRules.value
-                
-                // Persisted rules take precedence by packageName, but we keep any
-                // additional in-memory defaults that don't exist in the persisted set.
-                val merged = mutableMapOf<String, AppRule>()
-                merged.putAll(persistedMap)
-                currentMap.values.forEach { rule ->
-                    if (!merged.containsKey(rule.packageName)) {
-                        merged[rule.packageName] = rule
+
+            synchronized(stateLock) {
+                // A local mutation wins over whatever was on disk when this load started.
+                if (hasLocalChanges) return
+
+                if (json.isNotEmpty() && json != "[]") {
+                    val persistedList = Json.decodeFromString<List<AppRule>>(json)
+                    val persistedMap = persistedList.associateBy { it.packageName }
+                    val currentMap = _appRules.value
+
+                    // Persisted rules take precedence by packageName, but we keep any
+                    // additional in-memory defaults that don't exist in the persisted set.
+                    val merged = mutableMapOf<String, AppRule>()
+                    merged.putAll(persistedMap)
+                    currentMap.values.forEach { rule ->
+                        if (!merged.containsKey(rule.packageName)) {
+                            merged[rule.packageName] = rule
+                        }
                     }
+
+                    _appRules.value = merged
                 }
-                
-                _appRules.value = merged
-            } else {
-                // Only fall back to defaults if we truly have nothing loaded yet.
-                if (_appRules.value.isEmpty()) {
-                    initializeDefaultRules()
-                }
+                // An empty persisted value keeps the defaults seeded in init. Re-seeding here
+                // used to resurrect defaults after a clear that happened before this load.
             }
         } catch (e: Exception) {
-            // On error, only initialize defaults if nothing is in memory yet.
-            if (_appRules.value.isEmpty()) {
-                initializeDefaultRules()
-            }
+            // Keep whatever is already in memory; defaults were seeded synchronously in init.
         }
     }
     
@@ -175,23 +183,28 @@ class AppRulesRepository @Inject constructor(
         isEnabled: Boolean = true,
         syncStatusPhrases: List<String>? = null
     ) {
-        val currentRules = _appRules.value.toMutableMap()
-        val existingRule = currentRules[packageName]
-        
-        if (ruleType == null) {
-            currentRules.remove(packageName)
-        } else {
-            currentRules[packageName] = AppRule(
-                packageName = packageName,
-                appName = appName,
-                ruleType = ruleType,
-                isEnabled = isEnabled,
-                syncStatusPhrases = syncStatusPhrases ?: existingRule?.syncStatusPhrases ?: emptyList()
-            )
+        synchronized(stateLock) {
+            val currentRules = _appRules.value.toMutableMap()
+            val existingRule = currentRules[packageName]
+
+            if (ruleType == null) {
+                currentRules.remove(packageName)
+            } else {
+                currentRules[packageName] = AppRule(
+                    packageName = packageName,
+                    appName = appName,
+                    ruleType = ruleType,
+                    isEnabled = isEnabled,
+                    syncStatusPhrases = syncStatusPhrases ?: existingRule?.syncStatusPhrases ?: emptyList()
+                )
+            }
+
+            if (currentRules != _appRules.value) {
+                hasLocalChanges = true
+                _appRules.value = currentRules
+            }
         }
-        
-        _appRules.value = currentRules
-        
+
         // Persist changes
         appScope.launch {
             saveAppRules()
@@ -199,26 +212,37 @@ class AppRulesRepository @Inject constructor(
     }
     
     fun removeAppRule(packageName: String) {
-        val currentRules = _appRules.value.toMutableMap()
-        currentRules.remove(packageName)
-        _appRules.value = currentRules
-        
+        synchronized(stateLock) {
+            val currentRules = _appRules.value.toMutableMap()
+            if (currentRules.remove(packageName) != null) {
+                hasLocalChanges = true
+                _appRules.value = currentRules
+            }
+        }
+
         appScope.launch {
             saveAppRules()
         }
     }
     
     fun clearAllRules() {
-        _appRules.value = emptyMap()
-        
+        synchronized(stateLock) {
+            hasLocalChanges = true
+            _appRules.value = emptyMap()
+        }
+
         appScope.launch {
             saveAppRules()
         }
     }
     
     fun resetToDefaults() {
-        appScope.launch {
+        synchronized(stateLock) {
+            hasLocalChanges = true
             initializeDefaultRules()
+        }
+
+        appScope.launch {
             saveAppRules()
         }
     }
@@ -228,9 +252,11 @@ class AppRulesRepository @Inject constructor(
     }
     
     fun importAppRules(appRules: List<AppRule>) {
-        val rulesMap = appRules.associateBy { it.packageName }
-        _appRules.value = rulesMap
-        
+        synchronized(stateLock) {
+            hasLocalChanges = true
+            _appRules.value = appRules.associateBy { it.packageName }
+        }
+
         appScope.launch {
             saveAppRules()
         }
