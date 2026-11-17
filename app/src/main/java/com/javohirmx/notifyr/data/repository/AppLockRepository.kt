@@ -41,6 +41,9 @@ class AppLockRepository @Inject constructor(
 
     private fun now(): Long = nowProviderOverride?.invoke() ?: nowProvider()
 
+    private var failedPinAttempts = 0
+    private var lockoutUntilMs = 0L
+
     private val _uiState = MutableStateFlow(AppLockUiState())
     val uiState: StateFlow<AppLockUiState> = _uiState.asStateFlow()
 
@@ -54,10 +57,15 @@ class AppLockRepository @Inject constructor(
         val current = _uiState.value
         val hasPin = current.hasPin
         val shouldLock = enabled && hasPin
+        if (!enabled) {
+            failedPinAttempts = 0
+            lockoutUntilMs = 0L
+        }
         _uiState.value = current.copy(
             lockEnabled = enabled,
             isLocked = shouldLock,
-            lastUnlockTimeMs = if (shouldLock) -1L else current.lastUnlockTimeMs
+            lastUnlockTimeMs = if (shouldLock) -1L else current.lastUnlockTimeMs,
+            lockoutUntilMs = if (enabled) current.lockoutUntilMs else 0L
         )
         persist { it.copy(appLockEnabled = enabled) }
     }
@@ -77,11 +85,14 @@ class AppLockRepository @Inject constructor(
         runBlocking(Dispatchers.IO) {
             pinCredentialStore.savePin(pin)
         }
+        failedPinAttempts = 0
+        lockoutUntilMs = 0L
         val current = _uiState.value
         _uiState.value = current.copy(
             hasPin = true,
             isLocked = current.lockEnabled,
-            lastUnlockTimeMs = if (current.lockEnabled) -1L else current.lastUnlockTimeMs
+            lastUnlockTimeMs = if (current.lockEnabled) -1L else current.lastUnlockTimeMs,
+            lockoutUntilMs = 0L
         )
     }
 
@@ -89,11 +100,14 @@ class AppLockRepository @Inject constructor(
         runBlocking(Dispatchers.IO) {
             pinCredentialStore.clearPin()
         }
+        failedPinAttempts = 0
+        lockoutUntilMs = 0L
         _uiState.value = _uiState.value.copy(
             hasPin = false,
             lockEnabled = false,
             isLocked = false,
-            lastUnlockTimeMs = -1L
+            lastUnlockTimeMs = -1L,
+            lockoutUntilMs = 0L
         )
         persist {
             it.copy(
@@ -104,19 +118,47 @@ class AppLockRepository @Inject constructor(
     }
 
     fun verifyPinAndUnlock(pin: String): Boolean {
+        val currentTime = now()
+
+        // Reject attempts while a lockout is active, without touching the credential store.
+        if (currentTime < lockoutUntilMs) {
+            return false
+        }
+
+        // The previous lockout has expired; clear it before accepting a new attempt.
+        if (lockoutUntilMs != 0L) {
+            lockoutUntilMs = 0L
+            _uiState.value = _uiState.value.copy(lockoutUntilMs = 0L)
+        }
+
         val verified = runBlocking(Dispatchers.IO) {
             pinCredentialStore.verifyPin(pin)
         }
         if (verified) {
+            failedPinAttempts = 0
             unlockSession()
+        } else {
+            registerFailedAttempt(currentTime)
         }
         return verified
     }
 
+    private fun registerFailedAttempt(currentTime: Long) {
+        failedPinAttempts++
+        if (failedPinAttempts >= MAX_FAILED_PIN_ATTEMPTS) {
+            failedPinAttempts = 0
+            lockoutUntilMs = currentTime + PIN_LOCKOUT_MS
+            _uiState.value = _uiState.value.copy(lockoutUntilMs = lockoutUntilMs)
+        }
+    }
+
     fun unlockSession() {
+        failedPinAttempts = 0
+        lockoutUntilMs = 0L
         _uiState.value = _uiState.value.copy(
             isLocked = false,
-            lastUnlockTimeMs = now()
+            lastUnlockTimeMs = now(),
+            lockoutUntilMs = 0L
         )
     }
 
@@ -168,6 +210,12 @@ class AppLockRepository @Inject constructor(
     companion object {
         const val MIN_TIMEOUT_SECONDS = 15
         const val MAX_TIMEOUT_SECONDS = 900
+
+        /** Wrong PINs allowed before a short lockout. */
+        const val MAX_FAILED_PIN_ATTEMPTS = 5
+
+        /** How long further PIN attempts are rejected after too many failures. */
+        const val PIN_LOCKOUT_MS = 30_000L
     }
 }
 
@@ -177,5 +225,7 @@ data class AppLockUiState(
     val timeoutSeconds: Int = 60,
     val hasPin: Boolean = false,
     val isLocked: Boolean = false,
-    val lastUnlockTimeMs: Long = -1L
+    val lastUnlockTimeMs: Long = -1L,
+    /** Wall-clock time until which PIN attempts are rejected; 0 when not locked out. */
+    val lockoutUntilMs: Long = 0L
 )

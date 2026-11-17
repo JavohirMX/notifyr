@@ -1,6 +1,7 @@
 package com.javohirmx.notifyr.ui.security
 
 import android.app.Activity
+import android.content.pm.PackageManager
 import android.hardware.biometrics.BiometricPrompt
 import android.os.Build
 import android.os.CancellationSignal
@@ -19,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,6 +32,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.javohirmx.notifyr.data.repository.AppLockUiState
+import kotlinx.coroutines.delay
 
 @Composable
 fun AppLockGate(
@@ -41,10 +44,28 @@ fun AppLockGate(
     val biometricActivity = context as? Activity
     val biometricsAvailable = uiState.biometricEnabled &&
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
-        biometricActivity != null
+        biometricActivity != null &&
+        hasBiometricHardware(biometricActivity)
 
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+
+    // Tick while a lockout is active so the countdown and disabled button recover on their own.
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(uiState.lockoutUntilMs) {
+        if (uiState.lockoutUntilMs <= System.currentTimeMillis()) {
+            now = System.currentTimeMillis()
+            return@LaunchedEffect
+        }
+        while (System.currentTimeMillis() < uiState.lockoutUntilMs) {
+            now = System.currentTimeMillis()
+            delay(500L)
+        }
+        now = System.currentTimeMillis()
+    }
+    val isLockedOut = uiState.lockoutUntilMs > now
+    val remainingSeconds = ((uiState.lockoutUntilMs - now + 999L) / 1000L)
+        .coerceAtLeast(1L)
 
     Column(
         modifier = Modifier
@@ -88,25 +109,35 @@ fun AppLockGate(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                error?.let {
+                if (isLockedOut) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = it,
+                        text = "Too many attempts. Try again in ${remainingSeconds}s.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error
                     )
+                } else {
+                    error?.let {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Button(
                     onClick = {
+                        error = null
                         val valid = onUnlockWithPin(pin)
                         if (!valid) {
                             error = "Invalid PIN"
                         }
                     },
-                    enabled = pin.length >= 4,
+                    enabled = pin.length >= 4 && !isLockedOut,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Unlock")
@@ -132,6 +163,13 @@ fun AppLockGate(
             }
         }
     }
+}
+
+private fun hasBiometricHardware(activity: Activity): Boolean {
+    val packageManager = activity.packageManager
+    return packageManager.hasSystemFeature(PackageManager.FEATURE_FINGERPRINT) ||
+        packageManager.hasSystemFeature(PackageManager.FEATURE_FACE) ||
+        packageManager.hasSystemFeature(PackageManager.FEATURE_IRIS)
 }
 
 @RequiresApi(Build.VERSION_CODES.P)
