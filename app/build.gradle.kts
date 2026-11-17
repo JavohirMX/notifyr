@@ -47,6 +47,13 @@ android {
     }
 }
 
+kapt {
+    arguments {
+        // Commit the exported schemas so migrations can be diffed and tested.
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
+}
+
 dependencies {
     // Core Android
     implementation(libs.androidx.core.ktx)

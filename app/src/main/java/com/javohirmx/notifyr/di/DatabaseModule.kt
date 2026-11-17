@@ -34,7 +34,8 @@ object DatabaseModule {
             NotifyrDatabase.MIGRATION_5_6,
             NotifyrDatabase.MIGRATION_6_7
         )
-        .fallbackToDestructiveMigration() // For MVP, allow destructive migration if needed
+        // No destructive fallback: a missing migration should fail loudly in development
+        // rather than silently wiping the user's notification history.
         .build()
     }
     

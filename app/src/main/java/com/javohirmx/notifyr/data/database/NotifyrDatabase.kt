@@ -10,7 +10,7 @@ import android.content.Context
 @Database(
     entities = [NotificationEntity::class, ScreenTimeEntity::class, CustomTagEntity::class, ScreenTimeSessionEntity::class],
     version = 7,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class NotifyrDatabase : RoomDatabase() {
     
