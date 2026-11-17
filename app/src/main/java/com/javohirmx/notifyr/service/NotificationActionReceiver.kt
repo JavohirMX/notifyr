@@ -35,7 +35,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
             NotificationManager.ACTION_MARK_READ -> {
                 // Cancel the notification immediately for better UX
                 val notificationManager = NotificationManagerCompat.from(context)
-                notificationManager.cancel(NotificationManager.URGENT_NOTIFICATION_ID + notificationId.toInt())
+                notificationManager.cancel(NotificationIds.urgent(notificationId))
                 
                 // Mark as read in database synchronously
                 try {
@@ -54,7 +54,7 @@ class NotificationActionReceiver : BroadcastReceiver() {
             NotificationManager.ACTION_DISMISS -> {
                 // Cancel the notification
                 val notificationManager = NotificationManagerCompat.from(context)
-                notificationManager.cancel(NotificationManager.URGENT_NOTIFICATION_ID + notificationId.toInt())
+                notificationManager.cancel(NotificationIds.urgent(notificationId))
                 
                 Log.d(TAG, "Dismissed notification $notificationId")
             }

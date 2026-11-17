@@ -1,5 +1,6 @@
 package com.javohirmx.notifyr.service
 
+import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
@@ -18,6 +19,7 @@ import com.javohirmx.notifyr.widget.WidgetUpdateHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -64,6 +66,7 @@ class NotificationListenerService : NotificationListenerService() {
     
     companion object {
         private const val TAG = "NotificationListener"
+        private const val REBIND_DELAY_MS = 1_000L
     }
     
     override fun onCreate() {
@@ -138,6 +141,14 @@ class NotificationListenerService : NotificationListenerService() {
         // Filter out system-like notifications (Android System, System UI, core services)
         if (isSystemLikePackage(packageName)) {
             Log.d(TAG, "Filtered system package: $packageName")
+            return
+        }
+
+        // A group summary is just a container for the child notifications that are posted
+        // alongside it. Storing it adds a misleading history row, and cancelling it can
+        // collapse or hide the whole group, so leave summaries untouched.
+        if (isGroupSummary(sbn)) {
+            Log.d(TAG, "Skipping group summary: $packageName")
             return
         }
         
@@ -238,9 +249,16 @@ class NotificationListenerService : NotificationListenerService() {
             else -> 60_000L  // 60 seconds for all other notifications
         }
         
-        // Store with deduplication
-        // Pass isContinuous flag to use category-based deduplication for continuous notifications
-        notificationRepository.upsertWithDedup(enhancedNotification, dedupWindowMs, isContinuous = isContinuous)
+        // Store with deduplication.
+        // Pass isContinuous flag to use category-based deduplication for continuous notifications.
+        // The returned row ID is essential: notification actions and the urgent notification
+        // ID are keyed on it, so dropping it used to leave every stored notification at id 0.
+        val rowId = notificationRepository.upsertWithDedup(
+            enhancedNotification,
+            dedupWindowMs,
+            isContinuous = isContinuous
+        )
+        val storedNotification = enhancedNotification.copy(id = rowId)
         
         // Update notification widgets
         WidgetUpdateHelper.updateNotificationWidgets(this)
@@ -250,14 +268,14 @@ class NotificationListenerService : NotificationListenerService() {
             // Cancel original notification based on importance and focus mode
             when {
                 // URGENT: Cancel original, show our enhanced version
-                enhancedNotification.importance == NotificationImportance.URGENT && allowedByFocusMode -> {
+                storedNotification.importance == NotificationImportance.URGENT && allowedByFocusMode -> {
                     cancelNotification(notificationKey)
-                    handleUrgentNotification(enhancedNotification)
+                    handleUrgentNotification(storedNotification)
                     Log.d(TAG, "Suppressed original, showing urgent: $appName - $title")
                 }
                 
                 // NORMAL: Cancel original, add to digest
-                enhancedNotification.importance == NotificationImportance.NORMAL -> {
+                storedNotification.importance == NotificationImportance.NORMAL -> {
                     cancelNotification(notificationKey)
                     // Will be shown in digest
                     Log.d(TAG, "Suppressed normal notification: $appName - $title")
@@ -267,7 +285,7 @@ class NotificationListenerService : NotificationListenerService() {
                 }
                 
                 // IGNORE: Cancel original, silently archive
-                enhancedNotification.importance == NotificationImportance.IGNORE -> {
+                storedNotification.importance == NotificationImportance.IGNORE -> {
                     cancelNotification(notificationKey)
                     Log.d(TAG, "Suppressed ignored notification: $appName - $title")
                 }
@@ -283,7 +301,7 @@ class NotificationListenerService : NotificationListenerService() {
             Log.d(TAG, "Preserved ongoing notification: $appName - $title")
         }
         
-        Log.d(TAG, "Processed: $appName | ${enhancedNotification.importance} | Tags: ${enhancedNotification.tags.priority}, ${enhancedNotification.tags.contexts}")
+        Log.d(TAG, "Processed: $appName | ${storedNotification.importance} | Tags: ${storedNotification.tags.priority}, ${storedNotification.tags.contexts}")
     }
     
     private fun handleUrgentNotification(notification: NotificationData) {
@@ -299,7 +317,30 @@ class NotificationListenerService : NotificationListenerService() {
     
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
-        Log.w(TAG, "Notification Listener Service disconnected")
+        Log.w(TAG, "Notification Listener Service disconnected; requesting rebind")
+
+        // Android does not always reconnect the listener on its own after a disconnect.
+        // Without an explicit rebind the service can stay dead until the device reboots.
+        serviceScope.launch {
+            delay(REBIND_DELAY_MS)
+            try {
+                requestRebind(
+                    ComponentName(
+                        this@NotificationListenerService,
+                        NotificationListenerService::class.java
+                    )
+                )
+                Log.i(TAG, "Requested notification listener rebind")
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not request notification listener rebind", e)
+            }
+        }
+    }
+
+    private fun isGroupSummary(sbn: StatusBarNotification): Boolean {
+        // StatusBarNotification does not expose isGroupSummary() publicly; the flag is the
+        // supported way to identify the summary row of a notification group.
+        return (sbn.notification.flags and android.app.Notification.FLAG_GROUP_SUMMARY) != 0
     }
 
     /**

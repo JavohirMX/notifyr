@@ -40,8 +40,7 @@ class NotificationManager @Inject constructor(
         const val NORMAL_CHANNEL_ID = "normal_notifications"
         const val DIGEST_CHANNEL_ID = "digest_notifications"
         
-        const val URGENT_NOTIFICATION_ID = 1001
-        const val DIGEST_NOTIFICATION_ID = 1002
+        const val DIGEST_NOTIFICATION_ID = NotificationIds.DIGEST
         
         const val ACTION_MARK_READ = "com.javohirmx.notifyr.MARK_READ"
         const val ACTION_DISMISS = "com.javohirmx.notifyr.DISMISS"
@@ -135,9 +134,11 @@ class NotificationManager @Inject constructor(
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
         val pendingIntent = PendingIntent.getActivity(
-            context, 
-            0, 
-            intent, 
+            context,
+            // Extras are not part of a PendingIntent's identity, so sharing request code 0
+            // with the digest used to let one overwrite the other's "open_tab" extra.
+            NotificationIds.urgent(notification.id),
+            intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         
@@ -221,7 +222,7 @@ class NotificationManager @Inject constructor(
         
         try {
             notificationManager.notify(
-                URGENT_NOTIFICATION_ID + notification.id.toInt(),
+                NotificationIds.urgent(notification.id),
                 notificationBuilder.build()
             )
         } catch (e: SecurityException) {
@@ -244,7 +245,7 @@ class NotificationManager @Inject constructor(
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
-            0,
+            NotificationIds.DIGEST,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -308,7 +309,7 @@ class NotificationManager @Inject constructor(
         }
         val pendingIntent = PendingIntent.getActivity(
             context,
-            0,
+            NotificationIds.DIGEST,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -401,7 +402,7 @@ class NotificationManager @Inject constructor(
     }
     
     fun cancelUrgentNotification(notificationId: Long) {
-        notificationManager.cancel(URGENT_NOTIFICATION_ID + notificationId.toInt())
+        notificationManager.cancel(NotificationIds.urgent(notificationId))
     }
     
     fun cancelDigestNotification() {
