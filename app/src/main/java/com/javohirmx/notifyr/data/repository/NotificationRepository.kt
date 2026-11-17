@@ -196,6 +196,26 @@ class NotificationRepository @Inject constructor(
     suspend fun updateTimestamp(id: Long, timestamp: Long) {
         notificationDao.updateTimestamp(id, timestamp)
     }
+
+    /**
+     * Refreshes an existing row with the latest classification.
+     *
+     * Deduplication used to update only the timestamp, which meant a re-posted notification
+     * could change importance, tags, sender, or conversation without the history reflecting
+     * it. The row ID and read state belong to the existing row and are preserved.
+     */
+    private suspend fun refreshDuplicate(
+        existing: NotificationData,
+        incoming: NotificationData,
+        timestamp: Long
+    ) {
+        val refreshed = incoming.toEntity().copy(
+            id = existing.id,
+            timestamp = timestamp,
+            isRead = existing.isRead
+        )
+        notificationDao.updateNotification(refreshed)
+    }
     
     /**
      * Finds a recent continuous notification duplicate based on packageName + category.
@@ -252,28 +272,11 @@ class NotificationRepository @Inject constructor(
                 )
                 
                 if (dup != null) {
-                    // Update existing continuous notification entry
-                    // Use max of existing and new timestamp to handle concurrent updates
-                    val existingTimestamp = dup.timestamp
-                    val newTimestamp = max(existingTimestamp, notification.timestamp)
-                    
-                    // Update timestamp and optionally title/text if they changed significantly
-                    // Only update title/text if they're different (to track track changes in music players, etc.)
-                    val titleChanged = normalizeText(dup.title) != normalizeText(notification.title)
-                    val textChanged = normalizeText(dup.text) != normalizeText(notification.text)
-                    
-                    if (titleChanged || textChanged) {
-                        // Update content as well to reflect current state (e.g., current track)
-                        notificationDao.updateNotificationContent(
-                            dup.id,
-                            newTimestamp,
-                            notification.title,
-                            notification.text
-                        )
-                    } else {
-                        // Just update timestamp
-                        updateTimestamp(dup.id, newTimestamp)
-                    }
+                    // Update the existing continuous notification with the latest content
+                    // (current track, call state, etc.). Use max of existing and new
+                    // timestamp to handle concurrent updates.
+                    val newTimestamp = max(dup.timestamp, notification.timestamp)
+                    refreshDuplicate(dup, notification, newTimestamp)
                     return@withLock dup.id
                 } else {
                     // No existing continuous notification found, insert new one
@@ -291,11 +294,10 @@ class NotificationRepository @Inject constructor(
                 )
                 
                 if (dup != null) {
-                    // Refresh timestamp to keep it recent (atomic update)
-                    // Use max of existing and new timestamp to handle concurrent updates
-                    val existingTimestamp = dup.timestamp
-                    val newTimestamp = max(existingTimestamp, notification.timestamp)
-                    updateTimestamp(dup.id, newTimestamp)
+                    // Refresh the whole row, not just the timestamp, so re-classification
+                    // (importance/tags/sender) is reflected in history.
+                    val newTimestamp = max(dup.timestamp, notification.timestamp)
+                    refreshDuplicate(dup, notification, newTimestamp)
                     dup.id
                 } else {
                     insertNotification(notification)

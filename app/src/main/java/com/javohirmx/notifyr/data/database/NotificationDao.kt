@@ -231,7 +231,4 @@ interface NotificationDao {
 
     @Query("UPDATE notifications SET timestamp = :timestamp WHERE id = :id")
     suspend fun updateTimestamp(id: Long, timestamp: Long)
-    
-    @Query("UPDATE notifications SET timestamp = :timestamp, title = :title, text = :text WHERE id = :id")
-    suspend fun updateNotificationContent(id: Long, timestamp: Long, title: String, text: String)
 }

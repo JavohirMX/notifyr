@@ -17,6 +17,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.never
 
 class NotificationRepositoryTest {
@@ -315,9 +316,57 @@ class NotificationRepositoryTest {
         
         // Then
         assertThat(id).isEqualTo(existing.id)
-        verify(notificationDao).updateTimestamp(existing.id, now)
+        verify(notificationDao).updateNotification(argThat { entity ->
+            entity.id == existing.id &&
+                entity.timestamp == now &&
+                entity.importance == NotificationImportance.URGENT.value
+        })
         // Should not call insertNotification when duplicate is found
         verify(notificationDao, never()).insertNotification(any())
+    }
+
+    @Test
+    fun `upsertWithDedup refreshes content but preserves read state`() = runTest {
+        // Given
+        val now = System.currentTimeMillis()
+        val existing = NotificationEntity(
+            id = 5,
+            packageName = "com.example.app",
+            appName = "Example",
+            title = "Incoming call",
+            text = "John",
+            category = "call",
+            importance = NotificationImportance.NORMAL.value,
+            timestamp = now - 5_000,
+            isRead = true,
+            tagsJson = null
+        )
+        whenever(notificationDao.findRecentDuplicate(any(), any(), any(), any())).thenReturn(existing)
+
+        val newData = NotificationData(
+            id = 0,
+            packageName = existing.packageName,
+            appName = existing.appName,
+            title = existing.title,
+            text = existing.text,
+            category = existing.category,
+            importance = NotificationImportance.URGENT,
+            timestamp = now,
+            isRead = false
+        )
+
+        // When
+        val id = repository.upsertWithDedup(newData, 15_000)
+
+        // Then - the row keeps its identity and read flag, but gets the new classification.
+        assertThat(id).isEqualTo(existing.id)
+        verify(notificationDao).updateNotification(argThat { entity ->
+            entity.id == existing.id &&
+                entity.timestamp == now &&
+                entity.isRead &&
+                entity.importance == NotificationImportance.URGENT.value &&
+                entity.tagsJson != null
+        })
     }
     
     @Test
@@ -374,7 +423,9 @@ class NotificationRepositoryTest {
         
         // Then - should find duplicate via normalized matching
         assertThat(id).isEqualTo(existing.id)
-        verify(notificationDao).updateTimestamp(existing.id, now)
+        verify(notificationDao).updateNotification(argThat { entity ->
+            entity.id == existing.id && entity.timestamp == now
+        })
     }
     
     @Test
