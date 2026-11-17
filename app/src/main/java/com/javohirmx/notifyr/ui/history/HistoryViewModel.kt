@@ -252,10 +252,45 @@ class HistoryViewModel @Inject constructor(
         }
     }
     
+    /**
+     * Marks read either the whole importance tab, or only what the user currently sees when a
+     * search/filter is active.
+     *
+     * The visible list is already the exact result of search + SQL filters + context matching +
+     * grouping, so marking its IDs keeps this in sync without re-implementing those rules in SQL.
+     */
     fun markAllAsRead(importance: NotificationImportance) {
-        viewModelScope.launch {
-            notificationRepository.markAllAsReadByImportance(importance)
+        val criteriaActive = _searchQuery.value.isNotBlank() || _filterState.value.isActive
+
+        if (!criteriaActive) {
+            viewModelScope.launch {
+                notificationRepository.markAllAsReadByImportance(importance)
+            }
+            return
         }
+
+        // Capture at tap time so the coroutine marks what the user was looking at.
+        val ids = visibleNotifications(importance)
+            .flatMap { it.notificationIds() }
+            .distinct()
+
+        if (ids.isEmpty()) return
+
+        viewModelScope.launch {
+            notificationRepository.markAsReadBatch(ids)
+        }
+    }
+
+    private fun visibleNotifications(importance: NotificationImportance): List<NotificationItem> =
+        when (importance) {
+            NotificationImportance.URGENT -> _uiState.value.urgentNotifications
+            NotificationImportance.NORMAL -> _uiState.value.normalNotifications
+            NotificationImportance.IGNORE -> _uiState.value.ignoredNotifications
+        }
+
+    private fun NotificationItem.notificationIds(): List<Long> = when (this) {
+        is NotificationItem.Single -> listOf(notification.id)
+        is NotificationItem.Group -> group.notifications.map { it.id }
     }
     
     fun deleteNotification(notification: NotificationData) {

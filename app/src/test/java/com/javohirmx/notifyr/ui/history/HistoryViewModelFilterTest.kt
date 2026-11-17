@@ -13,12 +13,15 @@ import com.javohirmx.notifyr.domain.model.NotificationTags
 import com.javohirmx.notifyr.domain.usecase.GroupNotificationsUseCase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.*
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -39,6 +42,10 @@ class HistoryViewModelFilterTest {
     private lateinit var hybridClassifier: HybridNotificationClassifier
     private lateinit var viewModel: HistoryViewModel
     private lateinit var customTagRepository: com.javohirmx.notifyr.data.repository.CustomTagRepository
+
+    private val urgentFlow = MutableStateFlow<List<NotificationData>>(emptyList())
+    private val normalFlow = MutableStateFlow<List<NotificationData>>(emptyList())
+    private val ignoreFlow = MutableStateFlow<List<NotificationData>>(emptyList())
     
     @Before
     fun setup() {
@@ -64,16 +71,19 @@ class HistoryViewModelFilterTest {
         // Setup default repository responses.
         // The history screen now pushes its filters down into SQL, so it observes
         // getFilteredNotifications()/getDistinctApps() rather than the raw per-importance flows.
+        // Each importance gets its own controllable flow so tests can seed the visible list.
         whenever(
             notificationRepository.getFilteredNotifications(
-                org.mockito.kotlin.any(),
-                org.mockito.kotlin.anyOrNull(),
-                org.mockito.kotlin.any(),
-                org.mockito.kotlin.any(),
-                org.mockito.kotlin.any(),
-                org.mockito.kotlin.any()
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+                any(),
+                any()
             )
-        ).thenReturn(flowOf(emptyList()))
+        ).thenAnswer { invocation ->
+            flowFor(invocation.getArgument<NotificationImportance>(0))
+        }
         whenever(notificationRepository.getDistinctApps())
             .thenReturn(flowOf(emptyList()))
         
@@ -265,6 +275,92 @@ class HistoryViewModelFilterTest {
     }
     
     @Test
+    fun `mark all read with active search marks only matching visible notifications`() = runTest {
+        normalFlow.value = listOf(
+            createTestNotification(id = 1, title = "alpha alert"),
+            createTestNotification(id = 2, title = "beta alert")
+        )
+        advanceUntilIdle()
+
+        viewModel.updateSearchQuery("alpha")
+        advanceUntilIdle()
+
+        viewModel.markAllAsRead(NotificationImportance.NORMAL)
+        advanceUntilIdle()
+
+        verify(notificationRepository, times(1)).markAsReadBatch(listOf(1L))
+        verify(notificationRepository, never()).markAllAsReadByImportance(any())
+    }
+
+    @Test
+    fun `mark all read with active filter marks only the filtered notifications`() = runTest {
+        normalFlow.value = listOf(
+            createTestNotification(id = 1, packageName = "com.one", title = "One"),
+            createTestNotification(id = 2, packageName = "com.two", title = "Two")
+        )
+        advanceUntilIdle()
+
+        viewModel.toggleAppFilter("com.one")
+        advanceUntilIdle()
+
+        // The mock DAO does not apply SQL predicates, so narrow the flow as the real query would.
+        normalFlow.value = normalFlow.value.filter { it.packageName == "com.one" }
+        advanceUntilIdle()
+
+        viewModel.markAllAsRead(NotificationImportance.NORMAL)
+        advanceUntilIdle()
+
+        verify(notificationRepository, times(1)).markAsReadBatch(listOf(1L))
+        verify(notificationRepository, never()).markAllAsReadByImportance(any())
+    }
+
+    @Test
+    fun `mark all read without search or filters keeps marking the whole tab`() = runTest {
+        normalFlow.value = listOf(
+            createTestNotification(id = 1),
+            createTestNotification(id = 2)
+        )
+        advanceUntilIdle()
+
+        viewModel.markAllAsRead(NotificationImportance.NORMAL)
+        advanceUntilIdle()
+
+        verify(notificationRepository, times(1)).markAllAsReadByImportance(NotificationImportance.NORMAL)
+        verify(notificationRepository, never()).markAsReadBatch(any<List<Long>>(), any())
+    }
+
+    @Test
+    fun `mark all read with active filter includes every notification in a visible group`() = runTest {
+        normalFlow.value = listOf(
+            createTestNotification(id = 3, timestamp = 3000L),
+            createTestNotification(id = 2, timestamp = 2000L),
+            createTestNotification(id = 1, timestamp = 1000L)
+        )
+        advanceUntilIdle()
+
+        viewModel.toggleAppFilter("com.test")
+        advanceUntilIdle()
+
+        viewModel.markAllAsRead(NotificationImportance.NORMAL)
+        advanceUntilIdle()
+
+        verify(notificationRepository, times(1)).markAsReadBatch(listOf(3L, 2L, 1L))
+        verify(notificationRepository, never()).markAllAsReadByImportance(any())
+    }
+
+    @Test
+    fun `mark all read with active filter and nothing visible writes nothing`() = runTest {
+        viewModel.toggleAppFilter("com.nothing")
+        advanceUntilIdle()
+
+        viewModel.markAllAsRead(NotificationImportance.NORMAL)
+        advanceUntilIdle()
+
+        verify(notificationRepository, never()).markAllAsReadByImportance(any())
+        verify(notificationRepository, never()).markAsReadBatch(any<List<Long>>(), any())
+    }
+
+    @Test
     fun `refresh does not accumulate collectors`() = runTest {
         // Each refresh used to launch an additional set of collectors without cancelling the
         // previous ones, so repeated refreshes multiplied the work per database change.
@@ -284,6 +380,13 @@ class HistoryViewModelFilterTest {
         )
     }
     
+    private fun flowFor(importance: NotificationImportance): MutableStateFlow<List<NotificationData>> =
+        when (importance) {
+            NotificationImportance.URGENT -> urgentFlow
+            NotificationImportance.NORMAL -> normalFlow
+            NotificationImportance.IGNORE -> ignoreFlow
+        }
+
     private fun createTestNotification(
         id: Long,
         packageName: String = "com.test",
