@@ -63,7 +63,7 @@ class EnhancedNotificationRulesEngine @Inject constructor(
         "com.slack",
         "com.microsoft.teams",
         "com.microsoft.office.outlook",
-        "com.google.android.apps.gmail",
+        "com.google.android.gm",
         "com.asana.app",
         "com.trello",
         "com.atlassian.jira"
@@ -85,6 +85,34 @@ class EnhancedNotificationRulesEngine @Inject constructor(
         "com.google.android.youtube",
         "com.hulu.plus",
         "com.disney.disneyplus"
+    )
+    
+    private val shoppingContextKeywords = listOf("delivery", "shipped", "order")
+    private val workContextKeywords = listOf("meeting", "calendar", "deadline")
+    private val criticalKeywords = listOf(
+        "fraud", "security alert", "unauthorized", "emergency",
+        "critical", "suspended", "locked", "blocked"
+    )
+    private val urgentKeywords = listOf(
+        "urgent", "asap", "important", "deadline", "now",
+        "meeting", "call", "verify", "confirm"
+    )
+    private val immediateKeywords = listOf(
+        "now", "urgent", "asap", "emergency", "call",
+        "meeting in", "starting", "live"
+    )
+    private val soonKeywords = listOf("today", "tonight", "soon", "reminder", "upcoming")
+    private val needsResponseKeywords = listOf(
+        "reply", "respond", "confirm", "verify", "approve",
+        "accept", "decline", "review", "action required"
+    )
+    private val transactionalKeywords = listOf(
+        "receipt", "confirmation", "order placed", "payment",
+        "invoice", "shipped", "delivered"
+    )
+    private val automatedKeywords = listOf(
+        "automated", "no-reply", "do not reply", "notification",
+        "alert", "update", "reminder"
     )
     
     /**
@@ -118,7 +146,8 @@ class EnhancedNotificationRulesEngine @Inject constructor(
         val contexts = mutableSetOf<NotificationContext>()
         val packageName = notification.packageName
         
-        // Check app categories
+        // Check app categories. Work apps are checked before messaging apps because
+        // Slack and Teams are both; they should be tagged WORK, not PERSONAL.
         when {
             financialApps.contains(packageName) -> {
                 contexts.add(NotificationContext.FINANCIAL)
@@ -126,11 +155,11 @@ class EnhancedNotificationRulesEngine @Inject constructor(
             socialApps.contains(packageName) -> {
                 contexts.add(NotificationContext.SOCIAL)
             }
-            messagingApps.contains(packageName) -> {
-                contexts.add(NotificationContext.PERSONAL)
-            }
             workApps.contains(packageName) -> {
                 contexts.add(NotificationContext.WORK)
+            }
+            messagingApps.contains(packageName) -> {
+                contexts.add(NotificationContext.PERSONAL)
             }
             shoppingApps.contains(packageName) -> {
                 contexts.add(NotificationContext.SHOPPING)
@@ -143,11 +172,11 @@ class EnhancedNotificationRulesEngine @Inject constructor(
         // Check content for additional context
         val content = "${notification.title} ${notification.text}".lowercase()
         
-        if (content.contains("delivery") || content.contains("shipped") || content.contains("order")) {
+        if (shoppingContextKeywords.any { KeywordMatcher.matches(content, it) }) {
             contexts.add(NotificationContext.SHOPPING)
         }
         
-        if (content.contains("meeting") || content.contains("calendar") || content.contains("deadline")) {
+        if (workContextKeywords.any { KeywordMatcher.matches(content, it) }) {
             contexts.add(NotificationContext.WORK)
         }
         
@@ -162,13 +191,7 @@ class EnhancedNotificationRulesEngine @Inject constructor(
     private fun determinePriority(notification: NotificationData, contexts: Set<NotificationContext>): Priority {
         val content = "${notification.title} ${notification.text}".lowercase()
         
-        // Critical keywords
-        val criticalKeywords = listOf(
-            "fraud", "security alert", "unauthorized", "emergency", 
-            "critical", "suspended", "locked", "blocked"
-        )
-        
-        if (criticalKeywords.any { content.contains(it) }) {
+        if (criticalKeywords.any { KeywordMatcher.matches(content, it) }) {
             return Priority.CRITICAL
         }
         
@@ -177,13 +200,7 @@ class EnhancedNotificationRulesEngine @Inject constructor(
             return Priority.IMPORTANT
         }
         
-        // Check for urgent keywords
-        val urgentKeywords = listOf(
-            "urgent", "asap", "important", "deadline", "now",
-            "meeting", "call", "verify", "confirm"
-        )
-        
-        if (urgentKeywords.any { content.contains(it) }) {
+        if (urgentKeywords.any { KeywordMatcher.matches(content, it) }) {
             return Priority.IMPORTANT
         }
         
@@ -216,21 +233,11 @@ class EnhancedNotificationRulesEngine @Inject constructor(
         
         val content = "${notification.title} ${notification.text}".lowercase()
         
-        // Time-sensitive keywords
-        val immediateKeywords = listOf(
-            "now", "urgent", "asap", "emergency", "call",
-            "meeting in", "starting", "live"
-        )
-        
-        if (immediateKeywords.any { content.contains(it) }) {
+        if (immediateKeywords.any { KeywordMatcher.matches(content, it) }) {
             return TimeSensitivity.IMMEDIATE
         }
         
-        val soonKeywords = listOf(
-            "today", "tonight", "soon", "reminder", "upcoming"
-        )
-        
-        if (soonKeywords.any { content.contains(it) }) {
+        if (soonKeywords.any { KeywordMatcher.matches(content, it) }) {
             return TimeSensitivity.SOON
         }
         
@@ -246,23 +253,13 @@ class EnhancedNotificationRulesEngine @Inject constructor(
     private fun determineActionType(notification: NotificationData): ActionType {
         val content = "${notification.title} ${notification.text}".lowercase()
         
-        // Check for questions or requests
-        val needsResponseKeywords = listOf(
-            "?", "reply", "respond", "confirm", "verify", "approve",
-            "accept", "decline", "review", "action required"
-        )
-        
-        if (needsResponseKeywords.any { content.contains(it) }) {
+        // "?" is punctuation, not a word, so it is checked directly rather than through
+        // the whole-word matcher.
+        if (content.contains("?") || needsResponseKeywords.any { KeywordMatcher.matches(content, it) }) {
             return ActionType.NEEDS_RESPONSE
         }
         
-        // Check for transactional content
-        val transactionalKeywords = listOf(
-            "receipt", "confirmation", "order placed", "payment", 
-            "invoice", "shipped", "delivered"
-        )
-        
-        if (transactionalKeywords.any { content.contains(it) }) {
+        if (transactionalKeywords.any { KeywordMatcher.matches(content, it) }) {
             return ActionType.TRANSACTIONAL
         }
         
@@ -271,13 +268,7 @@ class EnhancedNotificationRulesEngine @Inject constructor(
             return ActionType.CONVERSATIONAL
         }
         
-        // Check for automated messages
-        val automatedKeywords = listOf(
-            "automated", "no-reply", "do not reply", "notification",
-            "alert", "update", "reminder"
-        )
-        
-        if (automatedKeywords.any { content.contains(it) }) {
+        if (automatedKeywords.any { KeywordMatcher.matches(content, it) }) {
             return ActionType.AUTOMATED
         }
         

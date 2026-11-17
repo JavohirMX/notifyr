@@ -165,11 +165,11 @@ class NotificationRulesEngine @Inject constructor(
                         val regex = Regex(keywordRule.keyword, RegexOption.IGNORE_CASE)
                         regex.containsMatchIn(content)
                     } catch (e: Exception) {
-                        // Invalid regex, fall back to simple contains
-                        content.contains(keywordRule.keyword.lowercase())
+                        // Invalid regex, fall back to whole-word matching
+                        KeywordMatcher.matches(content, keywordRule.keyword)
                     }
                 } else {
-                    content.contains(keywordRule.keyword.lowercase())
+                    KeywordMatcher.matches(content, keywordRule.keyword)
                 }
                 
                 if (matches) {
@@ -181,14 +181,14 @@ class NotificationRulesEngine @Inject constructor(
         
         // Fallback to default urgent keywords only if no user rules are defined
         for (keyword in defaultUrgentKeywords) {
-            if (content.contains(keyword.lowercase())) {
+            if (KeywordMatcher.matches(content, keyword)) {
                 return NotificationImportance.URGENT
             }
         }
         
         // Fallback to default ignore keywords
         for (keyword in defaultIgnoreKeywords) {
-            if (content.contains(keyword.lowercase())) {
+            if (KeywordMatcher.matches(content, keyword)) {
                 return NotificationImportance.IGNORE
             }
         }
