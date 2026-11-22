@@ -1,5 +1,7 @@
 package com.javohirmx.notifyr.ui.settings
 
+import android.app.TimePickerDialog
+import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -9,11 +11,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.javohirmx.notifyr.domain.model.FocusMode
+import com.javohirmx.notifyr.domain.model.TimeRange
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -24,6 +29,7 @@ fun FocusModeScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val selectedMode = uiState.selectedMode
     val autoSwitch = uiState.autoSwitch
+    val context = LocalContext.current
     
     Scaffold(
         topBar = {
@@ -127,20 +133,31 @@ fun FocusModeScreen(
                         
                         // Work Hours Setting
                         OutlinedButton(
-                            onClick = { /* TODO: Navigate to work hours settings */ },
+                            onClick = {
+                                showTimeRangePicker(context, uiState.workHours) { range ->
+                                    viewModel.updateWorkHours(range)
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Set Work Hours")
+                            Text(
+                                uiState.workHours?.let { "Work hours: ${formatTimeRange(it)}" }
+                                    ?: "Set Work Hours"
+                            )
                         }
                         
                         Spacer(modifier = Modifier.height(8.dp))
                         
                         // Sleep Hours Setting
                         OutlinedButton(
-                            onClick = { /* TODO: Navigate to sleep hours settings */ },
+                            onClick = {
+                                showTimeRangePicker(context, uiState.sleepHours) { range ->
+                                    viewModel.updateSleepHours(range)
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Set Sleep Hours")
+                            Text("Sleep hours: ${formatTimeRange(uiState.sleepHours)}")
                         }
                     }
                 }
@@ -233,3 +250,39 @@ fun FocusModeCard(
     }
 }
 
+private fun showTimeRangePicker(
+    context: Context,
+    initial: TimeRange?,
+    onPicked: (TimeRange) -> Unit
+) {
+    val range = initial ?: TimeRange(9, 0, 17, 0)
+
+    TimePickerDialog(
+        context,
+        { _, startHour, startMinute ->
+            TimePickerDialog(
+                context,
+                { _, endHour, endMinute ->
+                    onPicked(TimeRange(startHour, startMinute, endHour, endMinute))
+                },
+                range.endHour,
+                range.endMinute,
+                true
+            ).show()
+        },
+        range.startHour,
+        range.startMinute,
+        true
+    ).show()
+}
+
+private fun formatTimeRange(range: TimeRange): String {
+    return String.format(
+        Locale.getDefault(),
+        "%02d:%02d–%02d:%02d",
+        range.startHour,
+        range.startMinute,
+        range.endHour,
+        range.endMinute
+    )
+}
