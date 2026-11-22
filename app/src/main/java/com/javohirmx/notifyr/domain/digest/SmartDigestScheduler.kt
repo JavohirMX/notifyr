@@ -273,12 +273,10 @@ class SmartDigestScheduler @Inject constructor(
     
     private fun isCustomDigestTime(customTimes: List<TimeOfDay>): Boolean {
         val calendar = Calendar.getInstance()
-        val hour = calendar.get(Calendar.HOUR_OF_DAY)
-        val minute = calendar.get(Calendar.MINUTE)
-        
-        return customTimes.any { time ->
-            hour == time.hour && minute >= time.minute && minute < time.minute + 15
-        }
+        val minutesOfDay =
+            calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
+
+        return customTimes.any { it.isCurrentWithin(minutesOfDay) }
     }
     
     fun updateDigestSettings(settings: DigestSettings) {

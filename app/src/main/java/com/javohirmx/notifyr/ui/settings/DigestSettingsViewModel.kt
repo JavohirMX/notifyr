@@ -6,6 +6,7 @@ import com.javohirmx.notifyr.data.repository.DigestSettingsRepository
 import com.javohirmx.notifyr.domain.digest.SmartDigestScheduler
 import com.javohirmx.notifyr.domain.model.DigestMode
 import com.javohirmx.notifyr.domain.model.DigestSettings
+import com.javohirmx.notifyr.domain.model.TimeOfDay
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,6 +33,7 @@ class DigestSettingsViewModel @Inject constructor(
                 digestScheduler.updateDigestSettings(settings)
                 _uiState.value = DigestSettingsUiState(
                     selectedMode = settings.mode,
+                    customTimes = settings.customTimes.sortedBy { it.hour * 60 + it.minute },
                     minNotifications = settings.minNotificationThreshold.toFloat(),
                     unlockDelay = settings.unlockDelayMinutes.toFloat(),
                     groupConversations = settings.groupConversations,
@@ -47,6 +49,7 @@ class DigestSettingsViewModel @Inject constructor(
             val currentSettings = _uiState.value
             val newSettings = DigestSettings(
                 mode = mode,
+                customTimes = currentSettings.customTimes,
                 minNotificationThreshold = currentSettings.minNotifications.toInt(),
                 unlockDelayMinutes = currentSettings.unlockDelay.toInt(),
                 groupConversations = currentSettings.groupConversations,
@@ -55,6 +58,24 @@ class DigestSettingsViewModel @Inject constructor(
             )
             digestSettingsRepository.updateDigestSettings(newSettings)
         }
+    }
+
+    fun addCustomTime(time: TimeOfDay) {
+        val current = _uiState.value.customTimes
+        if (current.any { it.hour == time.hour && it.minute == time.minute }) return
+        _uiState.value = _uiState.value.copy(
+            customTimes = (current + time).sortedBy { it.hour * 60 + it.minute }
+        )
+        saveSettings()
+    }
+
+    fun removeCustomTime(time: TimeOfDay) {
+        _uiState.value = _uiState.value.copy(
+            customTimes = _uiState.value.customTimes.filterNot {
+                it.hour == time.hour && it.minute == time.minute
+            }
+        )
+        saveSettings()
     }
     
     fun updateMinNotifications(value: Float) {
@@ -87,6 +108,7 @@ class DigestSettingsViewModel @Inject constructor(
             val state = _uiState.value
             val settings = DigestSettings(
                 mode = state.selectedMode,
+                customTimes = state.customTimes,
                 minNotificationThreshold = state.minNotifications.toInt(),
                 unlockDelayMinutes = state.unlockDelay.toInt(),
                 groupConversations = state.groupConversations,
@@ -106,6 +128,7 @@ class DigestSettingsViewModel @Inject constructor(
 
 data class DigestSettingsUiState(
     val selectedMode: DigestMode = DigestMode.CONTEXT_AWARE,
+    val customTimes: List<TimeOfDay> = emptyList(),
     val minNotifications: Float = 3f,
     val unlockDelay: Float = 30f,
     val groupConversations: Boolean = true,

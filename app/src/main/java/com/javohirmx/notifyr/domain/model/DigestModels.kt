@@ -88,5 +88,22 @@ data class TimeOfDay(
         }
         return String.format("%d:%02d %s", displayHour, minute, period)
     }
+
+    /**
+     * True when [minutesOfDay] falls inside the window that starts at this time.
+     *
+     * The window wraps past midnight, so a digest at 23:50 still fires at 00:00.
+     */
+    fun isCurrentWithin(minutesOfDay: Int, windowMinutes: Int = DEFAULT_WINDOW_MINUTES): Boolean {
+        val normalized = ((minutesOfDay % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY
+        val start = hour * 60 + minute
+        val offset = (normalized - start + MINUTES_PER_DAY) % MINUTES_PER_DAY
+        return offset < windowMinutes
+    }
+
+    companion object {
+        const val MINUTES_PER_DAY = 24 * 60
+        const val DEFAULT_WINDOW_MINUTES = 15
+    }
 }
 

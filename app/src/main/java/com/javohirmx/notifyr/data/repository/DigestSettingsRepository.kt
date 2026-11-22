@@ -8,9 +8,13 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.javohirmx.notifyr.domain.model.DigestMode
 import com.javohirmx.notifyr.domain.model.DigestSettings
+import com.javohirmx.notifyr.domain.model.TimeOfDay
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,19 +25,31 @@ class DigestSettingsRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val MODE = stringPreferencesKey("digest_mode")
+    private val CUSTOM_TIMES = stringPreferencesKey("custom_times")
     private val MIN_THRESHOLD = intPreferencesKey("min_threshold")
     private val UNLOCK_DELAY = intPreferencesKey("unlock_delay")
     private val GROUP_CONVERSATIONS = booleanPreferencesKey("group_conversations")
     private val GROUP_BY_APP = booleanPreferencesKey("group_by_app")
     private val SHOW_SUMMARY = booleanPreferencesKey("show_summary")
+
+    private val json = Json { ignoreUnknownKeys = true }
     
     val digestSettings: Flow<DigestSettings> = context.digestDataStore.data.map { preferences ->
         val mode = preferences[MODE]?.let {
             try { DigestMode.valueOf(it) } catch (e: Exception) { DigestMode.CONTEXT_AWARE }
         } ?: DigestMode.CONTEXT_AWARE
+
+        val customTimes = preferences[CUSTOM_TIMES]?.let { raw ->
+            try {
+                json.decodeFromString<List<TimeOfDay>>(raw)
+            } catch (e: Exception) {
+                emptyList()
+            }
+        } ?: emptyList()
         
         DigestSettings(
             mode = mode,
+            customTimes = customTimes,
             minNotificationThreshold = preferences[MIN_THRESHOLD] ?: 3,
             unlockDelayMinutes = preferences[UNLOCK_DELAY] ?: 30,
             groupConversations = preferences[GROUP_CONVERSATIONS] ?: true,
@@ -45,6 +61,7 @@ class DigestSettingsRepository @Inject constructor(
     suspend fun updateDigestSettings(settings: DigestSettings) {
         context.digestDataStore.edit { preferences ->
             preferences[MODE] = settings.mode.name
+            preferences[CUSTOM_TIMES] = json.encodeToString(settings.customTimes)
             preferences[MIN_THRESHOLD] = settings.minNotificationThreshold
             preferences[UNLOCK_DELAY] = settings.unlockDelayMinutes
             preferences[GROUP_CONVERSATIONS] = settings.groupConversations

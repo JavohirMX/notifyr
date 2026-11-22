@@ -1,5 +1,7 @@
 package com.javohirmx.notifyr.ui.settings
 
+import android.app.TimePickerDialog
+import android.content.Context
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -10,11 +12,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.javohirmx.notifyr.domain.model.DigestMode
+import com.javohirmx.notifyr.domain.model.TimeOfDay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,6 +33,7 @@ fun DigestSettingsScreen(
     val groupConversations = uiState.groupConversations
     val groupByApp = uiState.groupByApp
     val showSummary = uiState.showSummary
+    val context = LocalContext.current
     
     Scaffold(
         topBar = {
@@ -171,23 +176,53 @@ fun DigestSettingsScreen(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium
                         )
-                        
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Text(
+                            text = "Digests are delivered within 15 minutes of each time.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
                         Spacer(modifier = Modifier.height(12.dp))
-                        
+
+                        if (uiState.customTimes.isEmpty()) {
+                            Text(
+                                text = "No custom times set. Add one below.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            uiState.customTimes.forEach { time ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = time.getDisplayString(),
+                                        style = MaterialTheme.typography.bodyLarge
+                                    )
+                                    TextButton(onClick = { viewModel.removeCustomTime(time) }) {
+                                        Text("Remove")
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
                         OutlinedButton(
-                            onClick = { /* TODO: Add time picker */ },
+                            onClick = {
+                                showDigestTimePicker(context) { time ->
+                                    viewModel.addCustomTime(time)
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Add Custom Time")
                         }
-                        
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Text(
-                            text = "No custom times set. Click above to add.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
                 
@@ -366,3 +401,12 @@ fun DigestModeCard(
     }
 }
 
+private fun showDigestTimePicker(context: Context, onPicked: (TimeOfDay) -> Unit) {
+    TimePickerDialog(
+        context,
+        { _, hourOfDay, minute -> onPicked(TimeOfDay(hourOfDay, minute)) },
+        9,
+        0,
+        true
+    ).show()
+}
