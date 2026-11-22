@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.javohirmx.notifyr.data.repository.NotificationRepository
+import com.javohirmx.notifyr.data.repository.NotificationRetentionRepository
 import com.javohirmx.notifyr.utils.PermissionUtils
 import com.javohirmx.notifyr.utils.TestNotificationHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -15,6 +16,7 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     application: Application,
     private val notificationRepository: NotificationRepository,
+    private val notificationRetentionRepository: NotificationRetentionRepository,
     private val testNotificationHelper: TestNotificationHelper
 ) : AndroidViewModel(application) {
     
@@ -23,6 +25,21 @@ class SettingsViewModel @Inject constructor(
     
     init {
         loadSettings()
+        observeRetention()
+    }
+    
+    private fun observeRetention() {
+        viewModelScope.launch {
+            notificationRetentionRepository.retentionDays.collect { days ->
+                _uiState.value = _uiState.value.copy(notificationRetentionDays = days)
+            }
+        }
+    }
+    
+    fun setNotificationRetentionDays(days: Int) {
+        viewModelScope.launch {
+            notificationRetentionRepository.setRetentionDays(days)
+        }
     }
     
     private fun loadSettings() {
@@ -115,5 +132,7 @@ data class SettingsUiState(
     val totalNotifications: Int = 0,
     val isLoading: Boolean = true,
     val isDeveloperModeEnabled: Boolean = false,
-    val versionTapCount: Int = 0
+    val versionTapCount: Int = 0,
+    /** Days of history to keep; 0 means unlimited. */
+    val notificationRetentionDays: Int = 90
 )

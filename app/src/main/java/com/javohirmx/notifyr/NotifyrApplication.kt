@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.javohirmx.notifyr.domain.digest.SmartDigestScheduler
+import com.javohirmx.notifyr.service.NotificationCleanupScheduler
 import com.javohirmx.notifyr.service.ScreenTimeCollectorService
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -19,6 +20,9 @@ class NotifyrApplication : Application(), Configuration.Provider {
     
     @Inject
     lateinit var screenTimeCollectorService: ScreenTimeCollectorService
+
+    @Inject
+    lateinit var notificationCleanupScheduler: NotificationCleanupScheduler
     
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -29,6 +33,7 @@ class NotifyrApplication : Application(), Configuration.Provider {
         super.onCreate()
         initializeDigestScheduler()
         initializeScreenTimeCollector()
+        notificationCleanupScheduler.schedule()
     }
     
     private fun initializeDigestScheduler() {

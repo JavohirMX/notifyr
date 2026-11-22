@@ -1,5 +1,6 @@
 package com.javohirmx.notifyr.ui.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -41,6 +42,7 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showClearOldDialog by remember { mutableStateOf(false) }
     var showClearAllDialog by remember { mutableStateOf(false) }
+    var showRetentionDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
     
     // Show toast when developer mode is activated
@@ -189,6 +191,15 @@ fun SettingsScreen(
                 description = "Remove notifications older than 7 days",
                 icon = Icons.Default.Clear,
                 onClick = { showClearOldDialog = true }
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            SettingCard(
+                title = "History Retention",
+                description = retentionDescription(uiState.notificationRetentionDays),
+                icon = Icons.Default.Info,
+                onClick = { showRetentionDialog = true }
             )
             
             Spacer(modifier = Modifier.height(8.dp))
@@ -346,6 +357,48 @@ fun SettingsScreen(
         )
     }
     
+    // History Retention Dialog
+    if (showRetentionDialog) {
+        val retentionOptions = listOf(0, 30, 60, 90, 180, 365)
+        AlertDialog(
+            onDismissRequest = { showRetentionDialog = false },
+            title = { Text("History Retention") },
+            text = {
+                Column {
+                    Text(
+                        "Automatically delete old notifications. Cleanup runs daily while " +
+                            "the device is charging or has enough battery."
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    retentionOptions.forEach { days ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    viewModel.setNotificationRetentionDays(days)
+                                    showRetentionDialog = false
+                                }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = uiState.notificationRetentionDays == days,
+                                onClick = null
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(if (days <= 0) "Keep everything" else "$days days")
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showRetentionDialog = false }) {
+                    Text("Done")
+                }
+            }
+        )
+    }
+
     // Clear All Data Confirmation Dialog
     if (showClearAllDialog) {
         AlertDialog(
@@ -526,5 +579,12 @@ fun SettingCard(
                 }
             )
         }
+    }
+}
+private fun retentionDescription(days: Int): String {
+    return if (days <= 0) {
+        "Keep history until you clear it"
+    } else {
+        "Automatically delete notifications older than $days days"
     }
 }

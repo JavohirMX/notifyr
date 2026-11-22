@@ -17,7 +17,9 @@ data class AppSettings(
     val temporaryStatusesJson: String = "[]",
     val appLockEnabled: Boolean = false,
     val appLockBiometricEnabled: Boolean = true,
-    val appLockTimeoutSeconds: Int = 60
+    val appLockTimeoutSeconds: Int = 60,
+    /** Days to keep notification history; 0 or less keeps everything. */
+    val notificationRetentionDays: Int = 90
 )
 
 object SettingsSerializer : Serializer<AppSettings> {
