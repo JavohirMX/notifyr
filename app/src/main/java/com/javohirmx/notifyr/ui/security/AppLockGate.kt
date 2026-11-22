@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,11 +34,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.javohirmx.notifyr.data.repository.AppLockUiState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun AppLockGate(
     uiState: AppLockUiState,
-    onUnlockWithPin: (String) -> Boolean,
+    onUnlockWithPin: suspend (String) -> Boolean,
     onUnlockWithBiometric: () -> Unit
 ) {
     val context = LocalContext.current
@@ -49,6 +51,8 @@ fun AppLockGate(
 
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    var isVerifying by remember { mutableStateOf(false) }
 
     // Tick while a lockout is active so the countdown and disabled button recover on their own.
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -131,16 +135,23 @@ fun AppLockGate(
 
                 Button(
                     onClick = {
+                        if (isVerifying) return@Button
                         error = null
-                        val valid = onUnlockWithPin(pin)
-                        if (!valid) {
-                            error = "Invalid PIN"
+                        isVerifying = true
+                        scope.launch {
+                            // PIN verification hashes on a background dispatcher and can take
+                            // a moment; keep the button disabled until it returns.
+                            val valid = onUnlockWithPin(pin)
+                            isVerifying = false
+                            if (!valid) {
+                                error = "Invalid PIN"
+                            }
                         }
                     },
-                    enabled = pin.length >= 4 && !isLockedOut,
+                    enabled = pin.length >= 4 && !isLockedOut && !isVerifying,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Unlock")
+                    Text(if (isVerifying) "Checking…" else "Unlock")
                 }
 
                 if (biometricsAvailable) {

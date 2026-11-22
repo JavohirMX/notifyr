@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +40,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.javohirmx.notifyr.ui.security.AppLockViewModel
+import kotlinx.coroutines.launch
 
 private val timeoutOptions = listOf(30, 60, 300)
 
@@ -49,6 +51,7 @@ fun AppLockSettingsScreen(
     viewModel: AppLockViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
 
     var showSetupPinDialog by remember { mutableStateOf(false) }
     var showChangePinDialog by remember { mutableStateOf(false) }
@@ -215,8 +218,8 @@ fun AppLockSettingsScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.clearPinAndDisableLock()
                         showRemovePinDialog = false
+                        scope.launch { viewModel.clearPinAndDisableLock() }
                     }
                 ) {
                     Text("Remove")
@@ -237,7 +240,7 @@ private fun PinDialog(
     title: String,
     confirmText: String,
     onDismiss: () -> Unit,
-    onConfirm: (String, String) -> String?,
+    onConfirm: suspend (String, String) -> String?,
     onSuccess: () -> Unit
 ) {
     if (!visible) return
@@ -245,6 +248,8 @@ private fun PinDialog(
     var pin by remember { mutableStateOf("") }
     var confirmPin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
+    var isSaving by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -285,14 +290,24 @@ private fun PinDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = {
-                val validationError = onConfirm(pin, confirmPin)
-                if (validationError == null) {
-                    onSuccess()
-                } else {
-                    error = validationError
+            TextButton(
+                enabled = !isSaving,
+                onClick = {
+                    if (isSaving) return@TextButton
+                    isSaving = true
+                    scope.launch {
+                        // Hashing the PIN runs off the main thread; show the busy state until
+                        // validation and storage both finish.
+                        val validationError = onConfirm(pin, confirmPin)
+                        isSaving = false
+                        if (validationError == null) {
+                            onSuccess()
+                        } else {
+                            error = validationError
+                        }
+                    }
                 }
-            }) {
+            ) {
                 Text(confirmText)
             }
         },

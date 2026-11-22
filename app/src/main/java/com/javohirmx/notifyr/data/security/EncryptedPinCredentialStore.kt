@@ -5,6 +5,8 @@ import android.util.Base64
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 import java.security.SecureRandom
 import javax.crypto.SecretKeyFactory
@@ -32,7 +34,7 @@ class EncryptedPinCredentialStore @Inject constructor(
             !prefs.getString(PIN_SALT_KEY, null).isNullOrBlank()
     }
 
-    override suspend fun savePin(pin: String) {
+    override suspend fun savePin(pin: String) = withContext(Dispatchers.Default) {
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
         val hash = deriveHash(pin, salt)
         prefs.edit()
@@ -41,16 +43,16 @@ class EncryptedPinCredentialStore @Inject constructor(
             .apply()
     }
 
-    override suspend fun verifyPin(pin: String): Boolean {
-        val saltBase64 = prefs.getString(PIN_SALT_KEY, null) ?: return false
-        val hashBase64 = prefs.getString(PIN_HASH_KEY, null) ?: return false
+    override suspend fun verifyPin(pin: String): Boolean = withContext(Dispatchers.Default) {
+        val saltBase64 = prefs.getString(PIN_SALT_KEY, null) ?: return@withContext false
+        val hashBase64 = prefs.getString(PIN_HASH_KEY, null) ?: return@withContext false
         val salt = Base64.decode(saltBase64, Base64.NO_WRAP)
         val storedHash = Base64.decode(hashBase64, Base64.NO_WRAP)
         val candidateHash = deriveHash(pin, salt)
-        return MessageDigest.isEqual(storedHash, candidateHash)
+        MessageDigest.isEqual(storedHash, candidateHash)
     }
 
-    override suspend fun clearPin() {
+    override suspend fun clearPin() = withContext(Dispatchers.Default) {
         prefs.edit().remove(PIN_HASH_KEY).remove(PIN_SALT_KEY).apply()
     }
 

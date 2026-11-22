@@ -26,7 +26,7 @@ class AppLockViewModel @Inject constructor(
         appLockRepository.setTimeoutSeconds(seconds)
     }
 
-    fun setupPinAndEnable(pin: String, confirmPin: String): String? {
+    suspend fun setupPinAndEnable(pin: String, confirmPin: String): String? {
         val normalizedPin = pin.trim()
         if (normalizedPin.length < 4 || normalizedPin.length > 8 || !normalizedPin.all { it.isDigit() }) {
             return "PIN must be 4-8 digits"
@@ -39,7 +39,7 @@ class AppLockViewModel @Inject constructor(
         return null
     }
 
-    fun updatePin(pin: String, confirmPin: String): String? {
+    suspend fun updatePin(pin: String, confirmPin: String): String? {
         val normalizedPin = pin.trim()
         if (normalizedPin.length < 4 || normalizedPin.length > 8 || !normalizedPin.all { it.isDigit() }) {
             return "PIN must be 4-8 digits"
@@ -51,11 +51,11 @@ class AppLockViewModel @Inject constructor(
         return null
     }
 
-    fun clearPinAndDisableLock() {
+    suspend fun clearPinAndDisableLock() {
         appLockRepository.clearPin()
     }
 
-    fun verifyPinAndUnlock(pin: String): Boolean {
+    suspend fun verifyPinAndUnlock(pin: String): Boolean {
         return appLockRepository.verifyPinAndUnlock(pin.trim())
     }
 

@@ -81,10 +81,8 @@ class AppLockRepository @Inject constructor(
         persist { it.copy(appLockTimeoutSeconds = timeout) }
     }
 
-    fun setPin(pin: String) {
-        runBlocking(Dispatchers.IO) {
-            pinCredentialStore.savePin(pin)
-        }
+    suspend fun setPin(pin: String) {
+        pinCredentialStore.savePin(pin)
         failedPinAttempts = 0
         lockoutUntilMs = 0L
         val current = _uiState.value
@@ -96,10 +94,8 @@ class AppLockRepository @Inject constructor(
         )
     }
 
-    fun clearPin() {
-        runBlocking(Dispatchers.IO) {
-            pinCredentialStore.clearPin()
-        }
+    suspend fun clearPin() {
+        pinCredentialStore.clearPin()
         failedPinAttempts = 0
         lockoutUntilMs = 0L
         _uiState.value = _uiState.value.copy(
@@ -117,7 +113,7 @@ class AppLockRepository @Inject constructor(
         }
     }
 
-    fun verifyPinAndUnlock(pin: String): Boolean {
+    suspend fun verifyPinAndUnlock(pin: String): Boolean {
         val currentTime = now()
 
         // Reject attempts while a lockout is active, without touching the credential store.
@@ -131,9 +127,7 @@ class AppLockRepository @Inject constructor(
             _uiState.value = _uiState.value.copy(lockoutUntilMs = 0L)
         }
 
-        val verified = runBlocking(Dispatchers.IO) {
-            pinCredentialStore.verifyPin(pin)
-        }
+        val verified = pinCredentialStore.verifyPin(pin)
         if (verified) {
             failedPinAttempts = 0
             unlockSession()
