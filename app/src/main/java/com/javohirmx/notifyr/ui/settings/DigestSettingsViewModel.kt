@@ -121,7 +121,7 @@ class DigestSettingsViewModel @Inject constructor(
     
     fun triggerManualDigest() {
         viewModelScope.launch {
-            digestScheduler.showDigest()
+            digestScheduler.showDigest(respectFocusMode = false)
         }
     }
 }

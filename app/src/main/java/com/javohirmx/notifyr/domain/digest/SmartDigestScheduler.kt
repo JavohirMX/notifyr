@@ -224,25 +224,49 @@ class SmartDigestScheduler @Inject constructor(
     }
     
     /**
-     * Manually trigger digest display
+     * Rebuild the in-memory digest without posting a notification.
+     *
+     * Used by the digest screen so viewing or marking items read never re-posts a digest
+     * notification. Returns null when there is nothing to show.
      */
-    suspend fun showDigest() {
+    suspend fun regenerateDigest(respectFocusMode: Boolean = true): EnhancedDigest? {
         // Get notifications from last 4 hours
         val fourHoursAgo = System.currentTimeMillis() - TimeUnit.HOURS.toMillis(4)
+        val currentMode = if (respectFocusMode) {
+            focusModeManager.getCurrentMode()
+        } else {
+            FocusMode.NORMAL
+        }
+
         val notifications = notificationRepository
             .getByImportanceInRange(fourHoursAgo, System.currentTimeMillis(), NotificationImportance.NORMAL)
-            .filter { !it.isRead }
-        
+            .filter { notification ->
+                !notification.isRead &&
+                    focusModeManager.shouldShowNotification(notification, currentMode)
+            }
+
         if (notifications.isEmpty()) {
-            return
+            _currentDigest.value = null
+            return null
         }
-        
+
         // Generate digest
         val digest = digestGenerator.generateDigest(notifications, timeRangeMinutes = 240)
         _currentDigest.value = digest
-        
+        return digest
+    }
+
+    /**
+     * Rebuild the digest and post it as a notification.
+     *
+     * Automatic digests respect the active focus mode, so a blocked notification cannot
+     * resurface in the digest.
+     */
+    suspend fun showDigest(respectFocusMode: Boolean = true) {
+        val digest = regenerateDigest(respectFocusMode) ?: return
+
         lastDigestTime = System.currentTimeMillis()
-        
+
         // Show enhanced digest notification
         customNotificationManager.showEnhancedDigestNotification(digest)
     }

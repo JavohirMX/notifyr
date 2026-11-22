@@ -32,7 +32,9 @@ class DigestViewModel @Inject constructor(
         viewModelScope.launch {
             _isRefreshing.value = true
             try {
-                digestScheduler.showDigest()
+                // Rebuild in place; opening the digest screen must not post another
+                // digest notification.
+                digestScheduler.regenerateDigest()
             } finally {
                 _isRefreshing.value = false
             }
