@@ -56,6 +56,18 @@ interface NotificationDao {
     
     @Query("UPDATE notifications SET isRead = :isRead WHERE id = :id")
     suspend fun markAsRead(id: Long, isRead: Boolean = true)
+
+    /**
+     * Marks rows matching a dismissed status-bar notification as read.
+     *
+     * Status bar notifications do not expose the database row id, so the closest stable
+     * identity is the package plus the posted title/text.
+     */
+    @Query("""
+        UPDATE notifications SET isRead = 1
+        WHERE packageName = :packageName AND title = :title AND text = :text AND isRead = 0
+    """)
+    suspend fun markMatchingAsRead(packageName: String, title: String, text: String): Int
     
     @Query("UPDATE notifications SET isRead = :isRead WHERE id IN (:ids)")
     suspend fun markAsReadChunk(ids: List<Long>, isRead: Boolean): Int

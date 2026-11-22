@@ -3,6 +3,7 @@ package com.javohirmx.notifyr.service
 import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.service.notification.NotificationListenerService
+import android.service.notification.NotificationListenerService.RankingMap
 import android.service.notification.StatusBarNotification
 import android.util.Log
 import com.javohirmx.notifyr.data.repository.NotificationRepository
@@ -122,10 +123,41 @@ class NotificationListenerService : NotificationListenerService() {
         }
     }
     
-    override fun onNotificationRemoved(sbn: StatusBarNotification?) {
-        super.onNotificationRemoved(sbn)
-        // Handle notification removal if needed
-        Log.d(TAG, "Notification removed: ${sbn?.packageName}")
+    override fun onNotificationRemoved(
+        sbn: StatusBarNotification?,
+        rankingMap: RankingMap?,
+        reason: Int
+    ) {
+        super.onNotificationRemoved(sbn, rankingMap, reason)
+
+        val removed = sbn ?: return
+        if (removed.packageName == this.packageName) return
+
+        // Only a user dismissal means "seen and cleared". App cancellations, timeouts,
+        // snoozes, and group-summary cancellations should not flip read state.
+        // REASON_CANCEL is a user swipe, REASON_CANCEL_ALL is "clear all".
+        if (reason != NotificationListenerService.REASON_CANCEL &&
+            reason != NotificationListenerService.REASON_CANCEL_ALL
+        ) {
+            Log.d(TAG, "Notification removed (reason=$reason): ${removed.packageName}")
+            return
+        }
+
+        val title = removed.notification.extras.getCharSequence("android.title")?.toString() ?: ""
+        val text = removed.notification.extras.getCharSequence("android.text")?.toString() ?: ""
+
+        serviceScope.launch {
+            try {
+                val updated = notificationRepository.markDismissedAsRead(
+                    removed.packageName,
+                    title,
+                    text
+                )
+                Log.d(TAG, "Dismissed notification marked read: ${removed.packageName} ($updated row(s))")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error marking dismissed notification read", e)
+            }
+        }
     }
     
     private suspend fun processNotification(sbn: StatusBarNotification) {

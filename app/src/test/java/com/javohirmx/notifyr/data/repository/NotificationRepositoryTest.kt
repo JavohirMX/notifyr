@@ -166,6 +166,20 @@ class NotificationRepositoryTest {
         // Then
         verify(notificationDao).markAsRead(notificationId, true)
     }
+
+    @Test
+    fun `markDismissedAsRead should mark matching rows via dao`() = runTest {
+        // Given
+        whenever(notificationDao.markMatchingAsRead("com.example.app", "Subject", "Body"))
+            .thenReturn(2)
+
+        // When
+        val updated = repository.markDismissedAsRead("com.example.app", "Subject", "Body")
+
+        // Then
+        assertThat(updated).isEqualTo(2)
+        verify(notificationDao).markMatchingAsRead("com.example.app", "Subject", "Body")
+    }
     
     @Test
     fun `markAllAsReadByImportance should call dao with correct importance value`() = runTest {

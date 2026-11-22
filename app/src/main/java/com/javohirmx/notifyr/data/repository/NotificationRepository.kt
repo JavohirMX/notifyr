@@ -309,6 +309,15 @@ class NotificationRepository @Inject constructor(
     suspend fun markAsRead(id: Long, isRead: Boolean = true) {
         notificationDao.markAsRead(id, isRead)
     }
+
+    /**
+     * Marks notifications read when the user dismisses the original status-bar notification.
+     *
+     * Returning the affected row count is useful for tests and logging.
+     */
+    suspend fun markDismissedAsRead(packageName: String, title: String, text: String): Int {
+        return notificationDao.markMatchingAsRead(packageName, title, text)
+    }
     
     suspend fun markAllAsReadByImportance(importance: NotificationImportance) {
         notificationDao.markAllAsReadByImportance(importance.value)
