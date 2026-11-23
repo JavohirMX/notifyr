@@ -24,12 +24,18 @@ class DataManagementViewModel @Inject constructor(
     fun exportData(
         context: Context,
         exportType: ExportType,
-        includeSettings: Boolean = true
+        includeSettings: Boolean = true,
+        password: String? = null
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isExporting = true, exportError = null)
             
-            val result = dataExportImportService.exportData(context, exportType, includeSettings)
+            val result = dataExportImportService.exportData(
+                context,
+                exportType,
+                includeSettings,
+                password
+            )
             
             _uiState.value = _uiState.value.copy(
                 isExporting = false,
@@ -43,12 +49,19 @@ class DataManagementViewModel @Inject constructor(
         context: Context,
         uri: Uri,
         exportType: ExportType,
-        includeSettings: Boolean = true
+        includeSettings: Boolean = true,
+        password: String? = null
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isExporting = true, exportError = null)
             
-            val result = dataExportImportService.exportDataToUri(context, uri, exportType, includeSettings)
+            val result = dataExportImportService.exportDataToUri(
+                context,
+                uri,
+                exportType,
+                includeSettings,
+                password
+            )
             
             _uiState.value = _uiState.value.copy(
                 isExporting = false,
@@ -61,12 +74,18 @@ class DataManagementViewModel @Inject constructor(
     fun importDataFromUri(
         context: Context,
         uri: Uri,
-        replaceExisting: Boolean = false
+        replaceExisting: Boolean = false,
+        password: String? = null
     ) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isImporting = true, importError = null)
             
-            val result = dataExportImportService.importDataFromUri(context, uri, replaceExisting)
+            val result = dataExportImportService.importDataFromUri(
+                context,
+                uri,
+                replaceExisting,
+                password
+            )
             
             _uiState.value = _uiState.value.copy(
                 isImporting = false,

@@ -8,6 +8,8 @@ import com.javohirmx.notifyr.data.repository.FocusSettingsRepository
 import com.javohirmx.notifyr.data.repository.KeywordRulesRepository
 import com.javohirmx.notifyr.data.repository.NotificationRepository
 import com.javohirmx.notifyr.data.repository.NotificationRetentionRepository
+import com.javohirmx.notifyr.data.security.ExportCrypto
+import com.javohirmx.notifyr.data.security.WrongPasswordException
 import com.javohirmx.notifyr.domain.model.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -40,16 +42,17 @@ class DataExportImportService @Inject constructor(
     suspend fun exportData(
         context: Context,
         exportType: ExportType,
-        includeSettings: Boolean = true
+        includeSettings: Boolean = true,
+        password: String? = null
     ): ExportResult = withContext(Dispatchers.IO) {
         try {
             val exportData = buildExportData(exportType, includeSettings)
-            val jsonString = json.encodeToString(exportData)
+            val payload = encodePayload(json.encodeToString(exportData), password)
             val fileName = generateFileName(exportType)
             val file = File(context.getExternalFilesDir(null), fileName)
             
             FileOutputStream(file).use { output ->
-                output.write(jsonString.toByteArray())
+                output.write(payload)
             }
             
             ExportResult(
@@ -69,14 +72,15 @@ class DataExportImportService @Inject constructor(
         context: Context,
         uri: Uri,
         exportType: ExportType,
-        includeSettings: Boolean = true
+        includeSettings: Boolean = true,
+        password: String? = null
     ): ExportResult = withContext(Dispatchers.IO) {
         try {
             val exportData = buildExportData(exportType, includeSettings)
-            val jsonString = json.encodeToString(exportData)
+            val payload = encodePayload(json.encodeToString(exportData), password)
             
             context.contentResolver.openOutputStream(uri)?.use { output ->
-                output.write(jsonString.toByteArray())
+                output.write(payload)
             } ?: throw IOException("Could not open output stream")
             
             ExportResult(
@@ -89,6 +93,29 @@ class DataExportImportService @Inject constructor(
                 success = false,
                 error = "Export failed: ${e.message}"
             )
+        }
+    }
+
+    /** Encrypts the JSON when a password is supplied; otherwise writes plain JSON. */
+    private fun encodePayload(jsonString: String, password: String?): ByteArray =
+        if (password.isNullOrEmpty()) {
+            jsonString.toByteArray(Charsets.UTF_8)
+        } else {
+            ExportCrypto.encrypt(jsonString.toByteArray(Charsets.UTF_8), password)
+        }
+
+    private fun decodePayload(payload: ByteArray, password: String?): String {
+        if (!ExportCrypto.isEncrypted(payload)) {
+            return payload.toString(Charsets.UTF_8)
+        }
+        if (password.isNullOrEmpty()) {
+            throw IOException("This backup is encrypted. Enter its password to import it.")
+        }
+
+        return try {
+            ExportCrypto.decrypt(payload, password).toString(Charsets.UTF_8)
+        } catch (e: WrongPasswordException) {
+            throw IOException(e.message ?: "Incorrect backup password")
         }
     }
 
@@ -130,14 +157,15 @@ class DataExportImportService @Inject constructor(
     suspend fun importDataFromUri(
         context: Context,
         uri: Uri,
-        replaceExisting: Boolean = false
+        replaceExisting: Boolean = false,
+        password: String? = null
     ): ImportResult = withContext(Dispatchers.IO) {
         try {
-            val jsonString = context.contentResolver.openInputStream(uri)?.use { input ->
-                input.readBytes().toString(Charsets.UTF_8)
+            val payload = context.contentResolver.openInputStream(uri)?.use { input ->
+                input.readBytes()
             } ?: throw IOException("Could not read input stream")
             
-            val exportData = json.decodeFromString<ExportData>(jsonString)
+            val exportData = json.decodeFromString<ExportData>(decodePayload(payload, password))
             ImportResult(
                 success = true,
                 itemsImported = applyImport(exportData, replaceExisting)
@@ -152,10 +180,13 @@ class DataExportImportService @Inject constructor(
     
     suspend fun importDataFromFile(
         file: File,
-        replaceExisting: Boolean = false
+        replaceExisting: Boolean = false,
+        password: String? = null
     ): ImportResult = withContext(Dispatchers.IO) {
         try {
-            val exportData = json.decodeFromString<ExportData>(file.readText())
+            val exportData = json.decodeFromString<ExportData>(
+                decodePayload(file.readBytes(), password)
+            )
             ImportResult(
                 success = true,
                 itemsImported = applyImport(exportData, replaceExisting)
@@ -284,11 +315,17 @@ class DataExportImportService @Inject constructor(
     
     fun validateExportFile(context: Context, uri: Uri): Boolean {
         return try {
-            val jsonString = context.contentResolver.openInputStream(uri)?.use { input ->
-                input.readBytes().toString(Charsets.UTF_8)
+            val payload = context.contentResolver.openInputStream(uri)?.use { input ->
+                input.readBytes()
             } ?: return false
-            
-            val exportData = json.decodeFromString<ExportData>(jsonString)
+
+            // An encrypted backup cannot be checked without its password; accept it here and
+            // let the import report a missing or wrong password with a specific message.
+            if (ExportCrypto.isEncrypted(payload)) return true
+
+            val exportData = json.decodeFromString<ExportData>(
+                payload.toString(Charsets.UTF_8)
+            )
             
             // Basic validation
             exportData.version > 0 && exportData.appName == "Notifyr"

@@ -14,6 +14,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.javohirmx.notifyr.domain.model.ExportType
@@ -32,13 +36,24 @@ fun DataManagementScreen(
     var selectedExportType by remember { mutableStateOf(ExportType.COMPLETE) }
     var includeSettings by remember { mutableStateOf(true) }
     var replaceExisting by remember { mutableStateOf(false) }
+    var exportPassword by remember { mutableStateOf("") }
+    var exportPasswordConfirm by remember { mutableStateOf("") }
+    var importPassword by remember { mutableStateOf("") }
     
     // File picker launchers
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         uri?.let {
-            viewModel.exportDataToUri(context, it, selectedExportType, includeSettings)
+            viewModel.exportDataToUri(
+                context,
+                it,
+                selectedExportType,
+                includeSettings,
+                exportPassword.ifBlank { null }
+            )
+            exportPassword = ""
+            exportPasswordConfirm = ""
         }
     }
     
@@ -47,7 +62,13 @@ fun DataManagementScreen(
     ) { uri ->
         uri?.let {
             if (viewModel.validateImportFile(context, it)) {
-                viewModel.importDataFromUri(context, it, replaceExisting)
+                viewModel.importDataFromUri(
+                    context,
+                    it,
+                    replaceExisting,
+                    importPassword.ifBlank { null }
+                )
+                importPassword = ""
             } else {
                 // Show error for invalid file
             }
@@ -328,6 +349,7 @@ fun DataManagementScreen(
                         "• Export data to backup your settings and notification history\n" +
                         "• Import data to restore from a backup or transfer between devices\n" +
                         "• Files are saved in JSON format for compatibility\n" +
+                        "• Optionally encrypt exports with a password (AES-256)\n" +
                         "• All data is processed locally on your device",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -342,13 +364,21 @@ fun DataManagementScreen(
         ExportDialog(
             exportType = selectedExportType,
             includeSettings = includeSettings,
+            password = exportPassword,
+            passwordConfirm = exportPasswordConfirm,
             onExportTypeChange = { selectedExportType = it },
             onIncludeSettingsChange = { includeSettings = it },
+            onPasswordChange = { exportPassword = it },
+            onPasswordConfirmChange = { exportPasswordConfirm = it },
             onConfirm = {
                 showExportDialog = false
                 exportLauncher.launch("notifyr_export_${System.currentTimeMillis()}.json")
             },
-            onDismiss = { showExportDialog = false }
+            onDismiss = {
+                showExportDialog = false
+                exportPassword = ""
+                exportPasswordConfirm = ""
+            }
         )
     }
     
@@ -356,12 +386,17 @@ fun DataManagementScreen(
     if (showImportDialog) {
         ImportDialog(
             replaceExisting = replaceExisting,
+            password = importPassword,
             onReplaceExistingChange = { replaceExisting = it },
+            onPasswordChange = { importPassword = it },
             onConfirm = {
                 showImportDialog = false
                 importLauncher.launch("application/json")
             },
-            onDismiss = { showImportDialog = false }
+            onDismiss = {
+                showImportDialog = false
+                importPassword = ""
+            }
         )
     }
 }
@@ -370,11 +405,17 @@ fun DataManagementScreen(
 private fun ExportDialog(
     exportType: ExportType,
     includeSettings: Boolean,
+    password: String,
+    passwordConfirm: String,
     onExportTypeChange: (ExportType) -> Unit,
     onIncludeSettingsChange: (Boolean) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onPasswordConfirmChange: (String) -> Unit,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val passwordsMatch = password.isEmpty() || password == passwordConfirm
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Export Options") },
@@ -420,10 +461,44 @@ private fun ExportDialog(
                         )
                     }
                 }
+
+                Text(
+                    "Encrypt with a password (optional)",
+                    style = MaterialTheme.typography.labelLarge
+                )
+                Text(
+                    "Exports contain message text and senders. A password protects the file " +
+                        "if it is shared or stored somewhere else.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                PasswordField(
+                    value = password,
+                    label = "Password",
+                    onValueChange = onPasswordChange
+                )
+                if (password.isNotEmpty()) {
+                    PasswordField(
+                        value = passwordConfirm,
+                        label = "Confirm password",
+                        onValueChange = onPasswordConfirmChange,
+                        isError = !passwordsMatch
+                    )
+                    if (!passwordsMatch) {
+                        Text(
+                            "Passwords do not match",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
+            TextButton(
+                onClick = onConfirm,
+                enabled = passwordsMatch
+            ) {
                 Text("Export")
             }
         },
@@ -436,9 +511,44 @@ private fun ExportDialog(
 }
 
 @Composable
+private fun PasswordField(
+    value: String,
+    label: String,
+    onValueChange: (String) -> Unit,
+    isError: Boolean = false
+) {
+    var visible by remember { mutableStateOf(false) }
+
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        singleLine = true,
+        isError = isError,
+        visualTransformation = if (visible) {
+            VisualTransformation.None
+        } else {
+            PasswordVisualTransformation()
+        },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+        trailingIcon = {
+            IconButton(onClick = { visible = !visible }) {
+                Icon(
+                    imageVector = if (visible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                    contentDescription = if (visible) "Hide password" else "Show password"
+                )
+            }
+        },
+        modifier = Modifier.fillMaxWidth()
+    )
+}
+
+@Composable
 private fun ImportDialog(
     replaceExisting: Boolean,
+    password: String,
     onReplaceExistingChange: (Boolean) -> Unit,
+    onPasswordChange: (String) -> Unit,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -476,6 +586,16 @@ private fun ImportDialog(
                     } else {
                         MaterialTheme.colorScheme.onSurfaceVariant
                     }
+                )
+
+                Text(
+                    "Password (only for encrypted backups)",
+                    style = MaterialTheme.typography.labelLarge
+                )
+                PasswordField(
+                    value = password,
+                    label = "Password",
+                    onValueChange = onPasswordChange
                 )
             }
         },
