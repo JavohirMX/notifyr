@@ -353,7 +353,8 @@ class NotificationRepositoryTest {
             importance = NotificationImportance.NORMAL.value,
             timestamp = now - 5_000,
             isRead = true,
-            tagsJson = null
+            tagsJson = null,
+            isPinned = true
         )
         whenever(notificationDao.findRecentDuplicate(any(), any(), any(), any())).thenReturn(existing)
 
@@ -378,6 +379,7 @@ class NotificationRepositoryTest {
             entity.id == existing.id &&
                 entity.timestamp == now &&
                 entity.isRead &&
+                entity.isPinned &&
                 entity.importance == NotificationImportance.URGENT.value &&
                 entity.tagsJson != null
         })

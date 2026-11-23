@@ -9,7 +9,7 @@ import android.content.Context
 
 @Database(
     entities = [NotificationEntity::class, ScreenTimeEntity::class, CustomTagEntity::class, ScreenTimeSessionEntity::class],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class NotifyrDatabase : RoomDatabase() {
@@ -167,9 +167,8 @@ abstract class NotifyrDatabase : RoomDatabase() {
          * Migration from version 6 to 7
          * Adds: Composite indexes for the history list and count queries.
          *
-         * MUST stay registered in DatabaseModule — the database builder is configured with
-         * fallbackToDestructiveMigration(), so a missing migration silently drops the entire
-         * notification history.
+         * MUST stay registered in DatabaseModule: there is no destructive fallback, so a
+         * missing migration fails at open time instead of silently dropping history.
          */
         val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(database: SupportSQLiteDatabase) {
@@ -181,6 +180,18 @@ abstract class NotifyrDatabase : RoomDatabase() {
                 )
                 database.execSQL(
                     "CREATE INDEX IF NOT EXISTS index_notifications_packageName_importance_timestamp ON notifications(packageName, importance, timestamp)"
+                )
+            }
+        }
+
+        /**
+         * Migration from version 7 to 8
+         * Adds: isPinned flag so important history entries can stay on top.
+         */
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    "ALTER TABLE notifications ADD COLUMN isPinned INTEGER NOT NULL DEFAULT 0"
                 )
             }
         }

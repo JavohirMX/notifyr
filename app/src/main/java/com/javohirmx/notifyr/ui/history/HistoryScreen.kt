@@ -268,7 +268,8 @@ fun HistoryScreen(
                             showAppRuleDialog = true
                         },
                         onImportanceChange = viewModel::changeNotificationImportance,
-                        onTagsChange = viewModel::updateNotificationTags
+                        onTagsChange = viewModel::updateNotificationTags,
+                        onTogglePin = viewModel::togglePin
                     )
                     1 -> NotificationList(
                         notifications = uiState.normalNotifications,
@@ -285,7 +286,8 @@ fun HistoryScreen(
                             showAppRuleDialog = true
                         },
                         onImportanceChange = viewModel::changeNotificationImportance,
-                        onTagsChange = viewModel::updateNotificationTags
+                        onTagsChange = viewModel::updateNotificationTags,
+                        onTogglePin = viewModel::togglePin
                     )
                     2 -> NotificationList(
                         notifications = uiState.ignoredNotifications,
@@ -302,7 +304,8 @@ fun HistoryScreen(
                             showAppRuleDialog = true
                         },
                         onImportanceChange = viewModel::changeNotificationImportance,
-                        onTagsChange = viewModel::updateNotificationTags
+                        onTagsChange = viewModel::updateNotificationTags,
+                        onTogglePin = viewModel::togglePin
                     )
                 }
             }
@@ -456,7 +459,8 @@ fun NotificationList(
     onDeleteGroup: (NotificationGroup) -> Unit = {},
     onSetAppRule: ((String, String) -> Unit)? = null,
     onImportanceChange: ((NotificationData, NotificationImportance) -> Unit)? = null,
-    onTagsChange: ((NotificationData, NotificationTags) -> Unit)? = null
+    onTagsChange: ((NotificationData, NotificationTags) -> Unit)? = null,
+    onTogglePin: (NotificationData) -> Unit = {}
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         if (isLoading) {
@@ -599,7 +603,8 @@ fun NotificationList(
                                         onDelete = { onDelete(item.notification) },
                                         onSetAppRule = onSetAppRule,
                                         onImportanceChange = onImportanceChange,
-                                        onTagsChange = onTagsChange
+                                        onTagsChange = onTagsChange,
+                                        onTogglePin = { onTogglePin(item.notification) }
                                     )
                                 }
                                 is NotificationItem.Group -> {
@@ -611,7 +616,8 @@ fun NotificationList(
                                         onDeleteSingle = onDelete,
                                         onSetAppRule = onSetAppRule,
                                         onImportanceChange = onImportanceChange,
-                                        onTagsChange = onTagsChange
+                                        onTagsChange = onTagsChange,
+                                        onTogglePin = onTogglePin
                                     )
                                 }
                             }
@@ -633,7 +639,8 @@ fun NotificationGroupCard(
     onDeleteSingle: (NotificationData) -> Unit,
     onSetAppRule: ((String, String) -> Unit)? = null,
     onImportanceChange: ((NotificationData, NotificationImportance) -> Unit)? = null,
-    onTagsChange: ((NotificationData, NotificationTags) -> Unit)? = null
+    onTagsChange: ((NotificationData, NotificationTags) -> Unit)? = null,
+    onTogglePin: (NotificationData) -> Unit = {}
 ) {
     val context = LocalContext.current
     val packageManager = context.packageManager
@@ -932,7 +939,8 @@ fun NotificationGroupCard(
                         GroupedNotificationItem(
                             notification = notification,
                             onMarkAsRead = { onMarkSingleAsRead(notification) },
-                            onDelete = { onDeleteSingle(notification) }
+                            onDelete = { onDeleteSingle(notification) },
+                            onTogglePin = { onTogglePin(notification) }
                         )
                     }
                 }
@@ -1013,7 +1021,8 @@ fun NotificationGroupCard(
 private fun GroupedNotificationItem(
     notification: NotificationData,
     onMarkAsRead: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onTogglePin: () -> Unit = {}
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -1098,6 +1107,21 @@ private fun GroupedNotificationItem(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
+                IconButton(
+                    onClick = onTogglePin
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PushPin,
+                        contentDescription = if (notification.isPinned) "Unpin" else "Pin",
+                        modifier = Modifier.size(18.dp),
+                        tint = if (notification.isPinned) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        }
+                    )
+                }
+
                 if (!notification.isRead) {
                     IconButton(
                         onClick = onMarkAsRead
@@ -1133,7 +1157,8 @@ fun NotificationHistoryCard(
     onDelete: () -> Unit,
     onSetAppRule: ((String, String) -> Unit)? = null,
     onImportanceChange: ((NotificationData, NotificationImportance) -> Unit)? = null,
-    onTagsChange: ((NotificationData, NotificationTags) -> Unit)? = null
+    onTagsChange: ((NotificationData, NotificationTags) -> Unit)? = null,
+    onTogglePin: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val packageManager = context.packageManager
@@ -1434,6 +1459,23 @@ fun NotificationHistoryCard(
                         
                         // Mark read and delete buttons (right side)
                         Row {
+                            if (onTogglePin != null) {
+                                IconButton(
+                                    onClick = onTogglePin
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PushPin,
+                                        contentDescription = if (notification.isPinned) "Unpin" else "Pin",
+                                        modifier = Modifier.size(20.dp),
+                                        tint = if (notification.isPinned) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+                                }
+                            }
+
                             if (!notification.isRead) {
                                 IconButton(
                                     onClick = onMarkAsRead
@@ -1445,7 +1487,7 @@ fun NotificationHistoryCard(
                                     )
                                 }
                             }
-                            
+
                             IconButton(
                                 onClick = onDelete
                             ) {
@@ -1598,6 +1640,7 @@ private fun getImportanceColor(importance: NotificationImportance): androidx.com
  * Represents a date group for notifications
  */
 enum class DateGroup(val displayName: String) {
+    PINNED("Pinned"),
     TODAY("Today"),
     YESTERDAY("Yesterday"),
     THIS_WEEK("This Week"),
@@ -1661,12 +1704,19 @@ private fun groupNotificationsByDate(notifications: List<NotificationItem>): Lis
             is NotificationItem.Single -> item.notification.timestamp
             is NotificationItem.Group -> item.group.lastTimestamp
         }
-        val group = getDateGroup(timestamp)
+        // Pinned entries get their own leading section so an older pinned row is not buried
+        // under newer date headers. A group counts as pinned when any of its rows is pinned.
+        val isPinned = when (item) {
+            is NotificationItem.Single -> item.notification.isPinned
+            is NotificationItem.Group -> item.group.notifications.any { it.isPinned }
+        }
+        val group = if (isPinned) DateGroup.PINNED else getDateGroup(timestamp)
         grouped.getOrPut(group) { mutableListOf() }.add(item)
     }
     
-    // Return in order: Today, Yesterday, This Week, Older
+    // Return in order: Pinned, Today, Yesterday, This Week, Older
     return listOf(
+        DateGroup.PINNED,
         DateGroup.TODAY,
         DateGroup.YESTERDAY,
         DateGroup.THIS_WEEK,

@@ -15,13 +15,13 @@ interface NotificationDao {
         const val MAX_SQL_BIND_ARGS = 900
     }
     
-    @Query("SELECT * FROM notifications ORDER BY timestamp DESC")
+    @Query("SELECT * FROM notifications ORDER BY isPinned DESC, timestamp DESC")
     fun getAllNotifications(): Flow<List<NotificationEntity>>
     
-    @Query("SELECT * FROM notifications ORDER BY timestamp DESC")
+    @Query("SELECT * FROM notifications ORDER BY isPinned DESC, timestamp DESC")
     suspend fun getAllNotificationsSync(): List<NotificationEntity>
     
-    @Query("SELECT * FROM notifications WHERE importance = :importance ORDER BY timestamp DESC")
+    @Query("SELECT * FROM notifications WHERE importance = :importance ORDER BY isPinned DESC, timestamp DESC")
     fun getNotificationsByImportance(importance: Int): Flow<List<NotificationEntity>>
     
     @Query("SELECT * FROM notifications WHERE packageName = :packageName ORDER BY timestamp DESC")
@@ -57,6 +57,9 @@ interface NotificationDao {
     @Query("UPDATE notifications SET isRead = :isRead WHERE id = :id")
     suspend fun markAsRead(id: Long, isRead: Boolean = true)
 
+    @Query("UPDATE notifications SET isPinned = :isPinned WHERE id = :id")
+    suspend fun setPinned(id: Long, isPinned: Boolean)
+    
     /**
      * Marks rows matching a dismissed status-bar notification as read.
      *
@@ -140,7 +143,7 @@ interface NotificationDao {
         """
         SELECT * FROM notifications
         WHERE importance = :importance AND (title != '' OR text != '')
-        ORDER BY timestamp DESC
+        ORDER BY isPinned DESC, timestamp DESC
         LIMIT :limit
         """
     )
@@ -192,7 +195,7 @@ interface NotificationDao {
           AND (:readStatus IS NULL OR isRead = :readStatus)
           AND timestamp >= :startTime AND timestamp <= :endTime
           AND (title != '' OR text != '')
-        ORDER BY timestamp DESC
+        ORDER BY isPinned DESC, timestamp DESC
         """
     )
     fun getFilteredByImportance(
@@ -211,7 +214,7 @@ interface NotificationDao {
           AND (title != '' OR text != '')
           AND packageName IN (:selectedApps)
           AND (:senderQuery = '' OR sender LIKE '%' || :senderQuery || '%')
-        ORDER BY timestamp DESC
+        ORDER BY isPinned DESC, timestamp DESC
         """
     )
     fun getFilteredByImportanceAndApps(

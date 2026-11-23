@@ -212,7 +212,9 @@ class NotificationRepository @Inject constructor(
         val refreshed = incoming.toEntity().copy(
             id = existing.id,
             timestamp = timestamp,
-            isRead = existing.isRead
+            isRead = existing.isRead,
+            // Pinning is a user decision, not part of the incoming notification.
+            isPinned = existing.isPinned
         )
         notificationDao.updateNotification(refreshed)
     }
@@ -310,6 +312,13 @@ class NotificationRepository @Inject constructor(
         notificationDao.markAsRead(id, isRead)
     }
 
+    /**
+     * Pins or unpins a history entry. Pinned rows sort above newer rows in their tab.
+     */
+    suspend fun setPinned(id: Long, isPinned: Boolean) {
+        notificationDao.setPinned(id, isPinned)
+    }
+    
     /**
      * Marks notifications read when the user dismisses the original status-bar notification.
      *

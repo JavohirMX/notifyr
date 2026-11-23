@@ -32,7 +32,8 @@ object DatabaseModule {
             NotifyrDatabase.MIGRATION_3_4,
             NotifyrDatabase.MIGRATION_4_5,
             NotifyrDatabase.MIGRATION_5_6,
-            NotifyrDatabase.MIGRATION_6_7
+            NotifyrDatabase.MIGRATION_6_7,
+            NotifyrDatabase.MIGRATION_7_8
         )
         // No destructive fallback: a missing migration should fail loudly in development
         // rather than silently wiping the user's notification history.

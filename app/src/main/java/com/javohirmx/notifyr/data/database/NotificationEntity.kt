@@ -41,7 +41,8 @@ data class NotificationEntity(
     // New enhanced fields
     val tagsJson: String? = null,  // JSON serialized NotificationTags
     val sender: String? = null,
-    val conversationId: String? = null
+    val conversationId: String? = null,
+    val isPinned: Boolean = false
 )
 
 // Extension functions for conversion
@@ -125,7 +126,8 @@ fun NotificationEntity.toDomain(): NotificationData {
         isRead = isRead,
         tags = tags,
         sender = sender,
-        conversationId = conversationId
+        conversationId = conversationId,
+        isPinned = isPinned
     )
 }
 
@@ -148,6 +150,7 @@ fun NotificationData.toEntity(): NotificationEntity {
         isRead = isRead,
         tagsJson = tagsJson,
         sender = sender,
-        conversationId = conversationId
+        conversationId = conversationId,
+        isPinned = isPinned
     )
 }

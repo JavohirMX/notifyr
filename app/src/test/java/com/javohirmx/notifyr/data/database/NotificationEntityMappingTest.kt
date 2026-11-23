@@ -124,12 +124,30 @@ class NotificationEntityMappingTest {
                 contexts = setOf(NotificationContext.WORK)
             ),
             sender = "Alice",
-            conversationId = "conv-1"
+            conversationId = "conv-1",
+            isPinned = true
         )
 
         val roundTripped = original.toEntity().toDomain()
 
         assertThat(roundTripped).isEqualTo(original)
+    }
+
+    @Test
+    fun `pin flag survives a round trip and defaults to false`() {
+        val unpinned = NotificationData(
+            id = 1L,
+            packageName = "com.test",
+            appName = "Test App",
+            title = "Title",
+            text = "Body",
+            category = null,
+            importance = NotificationImportance.NORMAL,
+            timestamp = 1_700_000_000_000L
+        )
+
+        assertThat(unpinned.toEntity().toDomain().isPinned).isFalse()
+        assertThat(unpinned.copy(isPinned = true).toEntity().toDomain().isPinned).isTrue()
     }
 
     @Test

@@ -251,6 +251,12 @@ class HistoryViewModel @Inject constructor(
             notificationRepository.markAsRead(notification.id, true)
         }
     }
+
+    fun togglePin(notification: NotificationData) {
+        viewModelScope.launch {
+            notificationRepository.setPinned(notification.id, !notification.isPinned)
+        }
+    }
     
     /**
      * Marks read either the whole importance tab, or only what the user currently sees when a
