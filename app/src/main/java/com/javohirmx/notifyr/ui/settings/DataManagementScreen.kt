@@ -255,8 +255,9 @@ fun DataManagementScreen(
                                         )
                                     }
                                     val counts = result.itemsImported
+                                    val settingsSuffix = if (counts.settings > 0) ", settings" else ""
                                     Text(
-                                        "Imported: ${counts.appRules} app rules, ${counts.keywordRules} keyword rules, ${counts.notifications} notifications",
+                                        "Imported: ${counts.appRules} app rules, ${counts.keywordRules} keyword rules, ${counts.notifications} notifications$settingsSuffix",
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                 }
