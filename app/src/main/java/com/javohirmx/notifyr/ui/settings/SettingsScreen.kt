@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Lock
@@ -122,6 +123,15 @@ fun SettingsScreen(
                 description = "Mark specific contacts as always urgent",
                 icon = Icons.Default.Person,
                 onClick = { navController.navigate(Screen.Contacts.route) }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SettingCard(
+                title = "Muted Conversations",
+                description = "Review conversations whose notifications are archived",
+                icon = Icons.Default.VolumeOff,
+                onClick = { navController.navigate(Screen.MutedConversations.route) }
             )
         }
         

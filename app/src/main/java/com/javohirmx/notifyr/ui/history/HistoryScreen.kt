@@ -48,6 +48,8 @@ import com.javohirmx.notifyr.domain.model.NotificationImportance
 import com.javohirmx.notifyr.domain.model.NotificationItem
 import com.javohirmx.notifyr.domain.model.NotificationGroup
 import com.javohirmx.notifyr.domain.model.NotificationTags
+import com.javohirmx.notifyr.domain.model.conversationMuteKey
+import com.javohirmx.notifyr.domain.model.muteableConversationId
 import com.javohirmx.notifyr.domain.model.Priority
 import com.javohirmx.notifyr.domain.model.NotificationContext
 import com.javohirmx.notifyr.domain.model.TimeSensitivity
@@ -269,7 +271,9 @@ fun HistoryScreen(
                         },
                         onImportanceChange = viewModel::changeNotificationImportance,
                         onTagsChange = viewModel::updateNotificationTags,
-                        onTogglePin = viewModel::togglePin
+                        onTogglePin = viewModel::togglePin,
+                        mutedConversationKeys = uiState.mutedConversationKeys,
+                        onToggleConversationMute = viewModel::toggleConversationMute
                     )
                     1 -> NotificationList(
                         notifications = uiState.normalNotifications,
@@ -287,7 +291,9 @@ fun HistoryScreen(
                         },
                         onImportanceChange = viewModel::changeNotificationImportance,
                         onTagsChange = viewModel::updateNotificationTags,
-                        onTogglePin = viewModel::togglePin
+                        onTogglePin = viewModel::togglePin,
+                        mutedConversationKeys = uiState.mutedConversationKeys,
+                        onToggleConversationMute = viewModel::toggleConversationMute
                     )
                     2 -> NotificationList(
                         notifications = uiState.ignoredNotifications,
@@ -305,7 +311,9 @@ fun HistoryScreen(
                         },
                         onImportanceChange = viewModel::changeNotificationImportance,
                         onTagsChange = viewModel::updateNotificationTags,
-                        onTogglePin = viewModel::togglePin
+                        onTogglePin = viewModel::togglePin,
+                        mutedConversationKeys = uiState.mutedConversationKeys,
+                        onToggleConversationMute = viewModel::toggleConversationMute
                     )
                 }
             }
@@ -460,7 +468,9 @@ fun NotificationList(
     onSetAppRule: ((String, String) -> Unit)? = null,
     onImportanceChange: ((NotificationData, NotificationImportance) -> Unit)? = null,
     onTagsChange: ((NotificationData, NotificationTags) -> Unit)? = null,
-    onTogglePin: (NotificationData) -> Unit = {}
+    onTogglePin: (NotificationData) -> Unit = {},
+    mutedConversationKeys: Set<String> = emptySet(),
+    onToggleConversationMute: (NotificationData) -> Unit = {}
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         if (isLoading) {
@@ -604,7 +614,13 @@ fun NotificationList(
                                         onSetAppRule = onSetAppRule,
                                         onImportanceChange = onImportanceChange,
                                         onTagsChange = onTagsChange,
-                                        onTogglePin = { onTogglePin(item.notification) }
+                                        onTogglePin = { onTogglePin(item.notification) },
+                                        isConversationMuted = item.notification.muteableConversationId?.let {
+                                            conversationMuteKey(item.notification.packageName, it) in mutedConversationKeys
+                                        } == true,
+                                        onToggleConversationMute = item.notification.muteableConversationId?.let {
+                                            { onToggleConversationMute(item.notification) }
+                                        }
                                     )
                                 }
                                 is NotificationItem.Group -> {
@@ -617,7 +633,9 @@ fun NotificationList(
                                         onSetAppRule = onSetAppRule,
                                         onImportanceChange = onImportanceChange,
                                         onTagsChange = onTagsChange,
-                                        onTogglePin = onTogglePin
+                                        onTogglePin = onTogglePin,
+                                        mutedConversationKeys = mutedConversationKeys,
+                                        onToggleConversationMute = onToggleConversationMute
                                     )
                                 }
                             }
@@ -640,7 +658,9 @@ fun NotificationGroupCard(
     onSetAppRule: ((String, String) -> Unit)? = null,
     onImportanceChange: ((NotificationData, NotificationImportance) -> Unit)? = null,
     onTagsChange: ((NotificationData, NotificationTags) -> Unit)? = null,
-    onTogglePin: (NotificationData) -> Unit = {}
+    onTogglePin: (NotificationData) -> Unit = {},
+    mutedConversationKeys: Set<String> = emptySet(),
+    onToggleConversationMute: (NotificationData) -> Unit = {}
 ) {
     val context = LocalContext.current
     val packageManager = context.packageManager
@@ -940,7 +960,13 @@ fun NotificationGroupCard(
                             notification = notification,
                             onMarkAsRead = { onMarkSingleAsRead(notification) },
                             onDelete = { onDeleteSingle(notification) },
-                            onTogglePin = { onTogglePin(notification) }
+                            onTogglePin = { onTogglePin(notification) },
+                            isConversationMuted = notification.muteableConversationId?.let {
+                                conversationMuteKey(notification.packageName, it) in mutedConversationKeys
+                            } == true,
+                            onToggleConversationMute = notification.muteableConversationId?.let {
+                                { onToggleConversationMute(notification) }
+                            }
                         )
                     }
                 }
@@ -1022,7 +1048,9 @@ private fun GroupedNotificationItem(
     notification: NotificationData,
     onMarkAsRead: () -> Unit,
     onDelete: () -> Unit,
-    onTogglePin: () -> Unit = {}
+    onTogglePin: () -> Unit = {},
+    isConversationMuted: Boolean = false,
+    onToggleConversationMute: (() -> Unit)? = null
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -1107,6 +1135,31 @@ private fun GroupedNotificationItem(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
+                if (onToggleConversationMute != null) {
+                    IconButton(
+                        onClick = onToggleConversationMute
+                    ) {
+                        Icon(
+                            imageVector = if (isConversationMuted) {
+                                Icons.Default.VolumeUp
+                            } else {
+                                Icons.Default.VolumeOff
+                            },
+                            contentDescription = if (isConversationMuted) {
+                                "Unmute conversation"
+                            } else {
+                                "Mute conversation"
+                            },
+                            modifier = Modifier.size(18.dp),
+                            tint = if (isConversationMuted) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+                }
+
                 IconButton(
                     onClick = onTogglePin
                 ) {
@@ -1158,7 +1211,9 @@ fun NotificationHistoryCard(
     onSetAppRule: ((String, String) -> Unit)? = null,
     onImportanceChange: ((NotificationData, NotificationImportance) -> Unit)? = null,
     onTagsChange: ((NotificationData, NotificationTags) -> Unit)? = null,
-    onTogglePin: (() -> Unit)? = null
+    onTogglePin: (() -> Unit)? = null,
+    isConversationMuted: Boolean = false,
+    onToggleConversationMute: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val packageManager = context.packageManager
@@ -1459,6 +1514,31 @@ fun NotificationHistoryCard(
                         
                         // Mark read and delete buttons (right side)
                         Row {
+                            if (onToggleConversationMute != null) {
+                                IconButton(
+                                    onClick = onToggleConversationMute
+                                ) {
+                                    Icon(
+                                        imageVector = if (isConversationMuted) {
+                                            Icons.Default.VolumeUp
+                                        } else {
+                                            Icons.Default.VolumeOff
+                                        },
+                                        contentDescription = if (isConversationMuted) {
+                                            "Unmute conversation"
+                                        } else {
+                                            "Mute conversation"
+                                        },
+                                        modifier = Modifier.size(20.dp),
+                                        tint = if (isConversationMuted) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+                                }
+                            }
+
                             if (onTogglePin != null) {
                                 IconButton(
                                     onClick = onTogglePin

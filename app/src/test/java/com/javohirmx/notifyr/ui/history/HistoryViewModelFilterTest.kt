@@ -42,6 +42,7 @@ class HistoryViewModelFilterTest {
     private lateinit var hybridClassifier: HybridNotificationClassifier
     private lateinit var viewModel: HistoryViewModel
     private lateinit var customTagRepository: com.javohirmx.notifyr.data.repository.CustomTagRepository
+    private lateinit var conversationMuteRepository: com.javohirmx.notifyr.data.repository.ConversationMuteRepository
 
     private val urgentFlow = MutableStateFlow<List<NotificationData>>(emptyList())
     private val normalFlow = MutableStateFlow<List<NotificationData>>(emptyList())
@@ -55,6 +56,13 @@ class HistoryViewModelFilterTest {
         notificationRepository = mock()
         appRulesRepository = mock()
         customTagRepository = mock()
+        conversationMuteRepository = mock()
+        whenever(conversationMuteRepository.mutedConversations)
+            .thenReturn(
+                MutableStateFlow<Map<String, com.javohirmx.notifyr.domain.model.MutedConversation>>(
+                    emptyMap()
+                )
+            )
         groupNotificationsUseCase = GroupNotificationsUseCase()
         hybridClassifier = mock()
         
@@ -93,7 +101,8 @@ class HistoryViewModelFilterTest {
             groupNotificationsUseCase,
             appRulesRepository,
             hybridClassifier,
-            customTagRepository
+            customTagRepository,
+            conversationMuteRepository
         )
     }
     

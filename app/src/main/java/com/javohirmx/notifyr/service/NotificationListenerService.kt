@@ -35,6 +35,9 @@ class NotificationListenerService : NotificationListenerService() {
     
     @Inject
     lateinit var appRulesRepository: com.javohirmx.notifyr.data.repository.AppRulesRepository
+
+    @Inject
+    lateinit var conversationMuteRepository: com.javohirmx.notifyr.data.repository.ConversationMuteRepository
     
     @Inject
     lateinit var rulesEngine: NotificationRulesEngine
@@ -217,11 +220,28 @@ class NotificationListenerService : NotificationListenerService() {
             // Extract conversationId and sender even in DONT_INTERCEPT mode for proper deduplication
             // Use enhancedRulesEngine to extract these fields without full classification
             val enhancedData = enhancedRulesEngine.classifyNotificationWithTags(baseNotificationData)
-            
+
+            // A conversation mute is more specific than the app's DONT_INTERCEPT rule, so it
+            // wins: archive the row and suppress the original instead of letting it through.
+            val isMuted = conversationMuteRepository.isMuted(
+                enhancedData.packageName,
+                enhancedData.conversationId
+            )
+            val storedData = if (isMuted) {
+                enhancedData.copy(importance = NotificationImportance.IGNORE)
+            } else {
+                enhancedData
+            }
+
             // Check if this is a continuous notification even in DONT_INTERCEPT mode
             val isContinuous = isContinuousNotification(notification, category)
             val dedupWindow = if (isContinuous) 5 * 60_000L else 60_000L
-            notificationRepository.upsertWithDedup(enhancedData, dedupWindow, isContinuous = isContinuous)
+            notificationRepository.upsertWithDedup(storedData, dedupWindow, isContinuous = isContinuous)
+
+            if (isMuted) {
+                cancelNotification(notificationKey)
+                Log.d(TAG, "Muted conversation suppressed (DONT_INTERCEPT mode): $appName")
+            }
             return // Don't process further - let original notification through
         }
         
@@ -266,7 +286,20 @@ class NotificationListenerService : NotificationListenerService() {
         }
         
         // Use HYBRID ML+Rules classifier for smart classification
-        val enhancedNotification = hybridClassifier.classify(notificationData)
+        val classifiedNotification = hybridClassifier.classify(notificationData)
+
+        // A muted conversation is archived regardless of what the classifier decided, so it
+        // never shows an urgent alert or reaches the digest.
+        val enhancedNotification = if (
+            conversationMuteRepository.isMuted(
+                classifiedNotification.packageName,
+                classifiedNotification.conversationId
+            )
+        ) {
+            classifiedNotification.copy(importance = NotificationImportance.IGNORE)
+        } else {
+            classifiedNotification
+        }
         
         // Check focus mode - should we show this notification?
         val currentFocusMode = focusModeManager.getCurrentMode()

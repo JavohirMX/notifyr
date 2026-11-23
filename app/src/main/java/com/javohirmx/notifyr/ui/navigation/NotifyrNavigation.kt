@@ -23,6 +23,7 @@ import com.javohirmx.notifyr.ui.ml.MLSettingsScreen
 import com.javohirmx.notifyr.ui.screentime.ScreenTimeScreen
 import com.javohirmx.notifyr.ui.settings.ScreenTimeSettingsScreen
 import com.javohirmx.notifyr.ui.settings.AppLockSettingsScreen
+import com.javohirmx.notifyr.ui.settings.MutedConversationsScreen
 
 @Composable
 fun NotifyrNavigation(
@@ -108,6 +109,10 @@ fun NotifyrNavigation(
         composable(Screen.AppLockSettings.route) {
             AppLockSettingsScreen(navController = navController)
         }
+
+        composable(Screen.MutedConversations.route) {
+            MutedConversationsScreen(navController = navController)
+        }
     }
 }
 
@@ -130,4 +135,5 @@ sealed class Screen(val route: String, val title: String) {
     object ScreenTime : Screen("screen_time", "Screen Time")
     object ScreenTimeSettings : Screen("screen_time_settings", "Screen Time Settings")
     object AppLockSettings : Screen("app_lock_settings", "App Lock")
+    object MutedConversations : Screen("muted_conversations", "Muted Conversations")
 }

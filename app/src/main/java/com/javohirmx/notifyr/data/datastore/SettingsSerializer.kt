@@ -19,7 +19,9 @@ data class AppSettings(
     val appLockBiometricEnabled: Boolean = true,
     val appLockTimeoutSeconds: Int = 60,
     /** Days to keep notification history; 0 or less keeps everything. */
-    val notificationRetentionDays: Int = 90
+    val notificationRetentionDays: Int = 90,
+    /** Serialized list of [com.javohirmx.notifyr.domain.model.MutedConversation]. */
+    val conversationMutesJson: String = "[]"
 )
 
 object SettingsSerializer : Serializer<AppSettings> {

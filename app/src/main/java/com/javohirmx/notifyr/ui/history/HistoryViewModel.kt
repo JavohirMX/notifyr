@@ -6,8 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.javohirmx.notifyr.data.repository.NotificationRepository
 import com.javohirmx.notifyr.domain.model.NotificationData
 import com.javohirmx.notifyr.domain.model.NotificationImportance
-import com.javohirmx.notifyr.domain.model.NotificationItem
 import com.javohirmx.notifyr.domain.model.NotificationGroup
+import com.javohirmx.notifyr.domain.model.NotificationItem
+import com.javohirmx.notifyr.domain.model.muteableConversationId
 import com.javohirmx.notifyr.domain.usecase.GroupNotificationsUseCase
 import com.javohirmx.notifyr.domain.ml.HybridNotificationClassifier
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,7 +26,8 @@ class HistoryViewModel @Inject constructor(
     private val groupNotificationsUseCase: GroupNotificationsUseCase,
     private val appRulesRepository: com.javohirmx.notifyr.data.repository.AppRulesRepository,
     private val hybridClassifier: HybridNotificationClassifier,
-    val customTagRepository: com.javohirmx.notifyr.data.repository.CustomTagRepository
+    val customTagRepository: com.javohirmx.notifyr.data.repository.CustomTagRepository,
+    private val conversationMuteRepository: com.javohirmx.notifyr.data.repository.ConversationMuteRepository
 ) : AndroidViewModel(application) {
     
     companion object {
@@ -96,8 +98,15 @@ class HistoryViewModel @Inject constructor(
             observeNotifications(NotificationImportance.IGNORE) { items ->
                 _uiState.update { it.copy(ignoredNotifications = items, isLoading = false) }
             },
-            observeAvailableApps()
+            observeAvailableApps(),
+            observeMutedConversations()
         )
+    }
+
+    private fun observeMutedConversations(): Job = viewModelScope.launch {
+        conversationMuteRepository.mutedConversations.collect { mutes ->
+            _uiState.update { it.copy(mutedConversationKeys = mutes.keys) }
+        }
     }
 
     private fun observeAvailableApps(): Job = viewModelScope.launch {
@@ -257,6 +266,31 @@ class HistoryViewModel @Inject constructor(
             notificationRepository.setPinned(notification.id, !notification.isPinned)
         }
     }
+
+    /**
+     * Mutes or unmutes the conversation a notification belongs to.
+     *
+     * Muting archives future notifications from the same app + sender instead of showing them.
+     * Notifications without a conversation ID (one-off app alerts) cannot be muted.
+     */
+    fun toggleConversationMute(notification: NotificationData) {
+        val conversationId = notification.muteableConversationId ?: return
+        viewModelScope.launch {
+            if (conversationMuteRepository.isMuted(notification.packageName, conversationId)) {
+                conversationMuteRepository.unmute(notification.packageName, conversationId)
+            } else {
+                conversationMuteRepository.mute(
+                    com.javohirmx.notifyr.domain.model.MutedConversation(
+                        packageName = notification.packageName,
+                        appName = notification.appName,
+                        conversationId = conversationId,
+                        label = notification.sender
+                            ?: notification.title.ifBlank { notification.appName }
+                    )
+                )
+            }
+        }
+    }
     
     /**
      * Marks read either the whole importance tab, or only what the user currently sees when a
@@ -407,7 +441,9 @@ data class HistoryUiState(
     // Filters are intentionally not mirrored here. They are owned by [filterState] and are
     // consumed directly by the screen; duplicating them would leave a stale copy that no
     // longer tracks the active filters.
-    val availableApps: List<AppInfo> = emptyList() // For app filter dropdown
+    val availableApps: List<AppInfo> = emptyList(), // For app filter dropdown
+    /** Keys from [com.javohirmx.notifyr.domain.model.conversationMuteKey] for muted chats. */
+    val mutedConversationKeys: Set<String> = emptySet()
 )
 
 /**
