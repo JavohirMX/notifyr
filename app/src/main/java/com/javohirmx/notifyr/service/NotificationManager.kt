@@ -45,6 +45,7 @@ class NotificationManager @Inject constructor(
         const val ACTION_MARK_READ = "com.javohirmx.notifyr.MARK_READ"
         const val ACTION_DISMISS = "com.javohirmx.notifyr.DISMISS"
         const val ACTION_OPEN_APP = "com.javohirmx.notifyr.OPEN_APP"
+        const val ACTION_MARK_DIGEST_READ = "com.javohirmx.notifyr.MARK_DIGEST_READ"
         
         const val EXTRA_NOTIFICATION_ID = "notification_id"
     }
@@ -379,6 +380,18 @@ class NotificationManager @Inject constructor(
             }
         }
         
+        // A one-tap way to clear the badge/digest without opening the app. The digest is
+        // a summary of unread NORMAL notifications, so marking those read is equivalent.
+        val markAllReadIntent = Intent(context, NotificationActionReceiver::class.java).apply {
+            action = ACTION_MARK_DIGEST_READ
+        }
+        val markAllReadPendingIntent = PendingIntent.getBroadcast(
+            context,
+            NotificationIds.DIGEST + 1,
+            markAllReadIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notificationBuilder = NotificationCompat.Builder(context, DIGEST_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_normal)
             .setLargeIcon(appIconBitmap)
@@ -391,6 +404,11 @@ class NotificationManager @Inject constructor(
             .setContentIntent(pendingIntent)
             .setNumber(digest.totalCount)
             .setOnlyAlertOnce(true)
+            .addAction(
+                R.drawable.ic_check,
+                "Mark all read",
+                markAllReadPendingIntent
+            )
         
         try {
             notificationManager.notify(DIGEST_NOTIFICATION_ID, notificationBuilder.build())
